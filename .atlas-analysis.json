@@ -1,0 +1,114 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "Cog",
+  "projectDescription": "Containers for machine learning - package ML models in production-ready Docker containers",
+  "theme": "aspen",
+  "primaryColor": "#FF6B6B",
+  "lightColor": "#FFE5E5",
+  "darkColor": "#CC4444",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/your-own-model",
+              "guides/deploying",
+              "guides/notebooks",
+              "guides/wsl2"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "config/cog-yaml",
+              "config/environment-variables",
+              "config/private-packages"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "CLI Commands",
+            "pages": [
+              "cli/overview",
+              "cli/build",
+              "cli/predict",
+              "cli/run",
+              "cli/serve",
+              "cli/push",
+              "cli/train"
+            ]
+          },
+          {
+            "group": "Python SDK",
+            "pages": [
+              "python/predictor",
+              "python/trainer",
+              "python/types",
+              "python/metrics"
+            ]
+          },
+          {
+            "group": "HTTP API",
+            "pages": [
+              "http/overview",
+              "http/predictions",
+              "http/webhooks",
+              "http/file-uploads"
+            ]
+          },
+          {
+            "group": "Redis Queue",
+            "pages": [
+              "redis/overview"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Package ML models in Docker containers without writing Dockerfiles",
+    "Automatic CUDA/cuDNN/PyTorch/TensorFlow compatibility management",
+    "Define model inputs and outputs with standard Python types",
+    "Automatic HTTP prediction server with OpenAPI schema",
+    "Built-in queue worker for long-running predictions",
+    "Fine-tuning API for creating derivative models",
+    "Deploy to any infrastructure that runs Docker",
+    "Streaming output support for iterative predictions"
+  ],
+  "publicApiSurface": [
+    "cog build - Build a Docker image from cog.yaml",
+    "cog predict - Run a prediction",
+    "cog run - Run arbitrary commands in the Docker environment",
+    "cog serve - Start HTTP server for predictions",
+    "cog push - Build and push Docker image to a registry",
+    "cog train - Run model training/fine-tuning",
+    "cog init - Initialize a new Cog project",
+    "BasePredictor - Base class for prediction interface",
+    "Input() - Define prediction input parameters",
+    "Path - File path type for inputs/outputs",
+    "File - File object type for inputs/outputs",
+    "Secret - Secure string type for sensitive data",
+    "ConcatenateIterator - Stream text output as concatenated string",
+    "POST /predictions - HTTP endpoint for predictions",
+    "PUT /predictions/<id> - Idempotent prediction creation",
+    "POST /predictions/<id>/cancel - Cancel a running prediction",
+    "GET /health-check - Health status endpoint",
+    "GET /openapi.json - OpenAPI specification"
+  ]
+}
