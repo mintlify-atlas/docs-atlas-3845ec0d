@@ -1,0 +1,185 @@
+---
+title: cog login
+description: Log in to a container registry
+---
+
+Authenticate with a container registry to push Docker images. This command is required before using `cog push` to deploy your models.
+
+## Usage
+
+```bash
+cog login [flags]
+```
+
+## Authentication Methods
+
+### Replicate Registry (r8.im)
+
+For Replicate's registry, `cog login` uses a token-based authentication flow:
+
+```bash
+# Interactive login (opens browser)
+cog login
+
+# Login with token from stdin
+echo "your-token" | cog login --token-stdin
+```
+
+<Tip>
+Find your Replicate login token at [https://replicate.com/auth/token](https://replicate.com/auth/token)
+</Tip>
+
+### Other Registries
+
+For Docker Hub, GitHub Container Registry, AWS ECR, and other registries, `cog login` prompts for username and password:
+
+```bash
+cog login
+```
+
+The command will ask:
+
+```bash
+Username: your-username
+Password: your-password
+```
+
+Credentials are stored securely using Docker's credential system.
+
+## Examples
+
+### Login to Replicate
+
+Interactive login that opens your browser:
+
+```bash
+cog login
+```
+
+### Login with token from stdin
+
+Useful for CI/CD pipelines:
+
+```bash
+echo "$REPLICATE_TOKEN" | cog login --token-stdin
+```
+
+### Login in CI/CD
+
+GitHub Actions example:
+
+```yaml .github/workflows/deploy.yml
+- name: Login to Replicate
+  run: echo "${{ secrets.REPLICATE_TOKEN }}" | cog login --token-stdin
+
+- name: Push model
+  run: cog push
+```
+
+### Login to Docker Hub
+
+```bash
+# Set registry to Docker Hub
+cog login --registry docker.io
+
+# Enter credentials when prompted
+```
+
+## Registry Configuration
+
+By default, `cog login` authenticates with Replicate's registry (`r8.im`). To use a different registry:
+
+```bash
+# Login to a custom registry
+cog login --registry my-registry.example.com
+```
+
+You can also set the registry via environment variable:
+
+```bash
+export COG_REGISTRY_HOST=my-registry.example.com
+cog login
+```
+
+## Supported Registries
+
+Cog works with any Docker-compatible container registry:
+
+- **Replicate** (`r8.im`) - Token-based authentication
+- **Docker Hub** (`docker.io`) - Username/password
+- **GitHub Container Registry** (`ghcr.io`) - Personal access token
+- **AWS ECR** - AWS credentials
+- **Google Container Registry** (`gcr.io`) - Service account
+- **Azure Container Registry** - Service principal
+- **Private registries** - Username/password or token
+
+<Note>
+For cloud provider registries (AWS ECR, GCR, ACR), you may need to use their CLI tools to authenticate first, then Cog will use those credentials automatically.
+</Note>
+
+## Options
+
+| Flag | Description |
+|------|-------------|
+| `--token-stdin` | Pass login token on stdin instead of opening a browser |
+| `--registry string` | Registry host to authenticate with (default: `r8.im`) |
+| `-h`, `--help` | Show help for the login command |
+
+## Security Best Practices
+
+### Store tokens securely
+
+Never commit tokens to version control:
+
+```bash
+# Bad - don't do this
+cog login --token-stdin < token.txt
+
+# Good - use environment variables
+echo "$REPLICATE_TOKEN" | cog login --token-stdin
+```
+
+### Use CI/CD secrets
+
+Store tokens in your CI/CD platform's secret management:
+
+- GitHub Actions: Repository secrets
+- GitLab CI: CI/CD variables
+- CircleCI: Environment variables
+- Travis CI: Encrypted environment variables
+
+### Rotate tokens regularly
+
+Generate new authentication tokens periodically and update your CI/CD secrets.
+
+## Troubleshooting
+
+### Authentication failed
+
+If login fails, verify:
+
+1. Your token or credentials are correct
+2. You have network connectivity to the registry
+3. The registry URL is correct
+
+### Docker not found
+
+Cog uses Docker's credential system. Make sure Docker is installed:
+
+```bash
+docker --version
+```
+
+### Permission denied
+
+On Linux, you may need to add your user to the `docker` group:
+
+```bash
+sudo usermod -aG docker $USER
+# Log out and back in for changes to take effect
+```
+
+## Related Commands
+
+- [cog push](/cli/push) - Build and push images to a registry
+- [cog build](/cli/build) - Build a Docker image locally

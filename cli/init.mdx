@@ -1,0 +1,129 @@
+---
+title: cog init
+description: Initialize a new Cog project
+---
+
+Create a `cog.yaml` and `predict.py` in the current directory. These files provide a starting template for defining your model's environment and prediction interface.
+
+## Usage
+
+```bash
+cog init
+```
+
+## What It Creates
+
+When you run `cog init`, Cog creates two files in the current directory:
+
+### cog.yaml
+
+A configuration file that defines your model's environment:
+
+```yaml cog.yaml
+build:
+  python_version: "3.12"
+  python_requirements: requirements.txt
+predict: "predict.py:Predictor"
+```
+
+### predict.py
+
+A template prediction interface:
+
+```python predict.py
+from cog import BasePredictor, Path, Input
+import torch
+
+class Predictor(BasePredictor):
+    def setup(self):
+        """Load the model into memory to make running multiple predictions efficient"""
+        self.net = torch.load("weights.pth")
+
+    def predict(self,
+            image: Path = Input(description="Image to enlarge"),
+            scale: float = Input(description="Factor to scale image by", default=1.5)
+    ) -> Path:
+        """Run a single prediction on the model"""
+        # ... pre-processing ...
+        output = self.net(input)
+        # ... post-processing ...
+        return output
+```
+
+## Examples
+
+### Initialize a new project
+
+```bash
+# Navigate to your project directory
+cd my-model
+
+# Initialize Cog
+cog init
+```
+
+Expected output:
+
+```bash
+Setting up the current directory for use with Cog...
+
+Created cog.yaml
+Created predict.py
+
+Next steps:
+  1. Edit cog.yaml to add your dependencies
+  2. Edit predict.py to define your prediction interface
+  3. Run 'cog predict' to test your model
+```
+
+### Start from scratch
+
+```bash
+# Create a new directory
+mkdir my-new-model
+cd my-new-model
+
+# Initialize with Cog
+cog init
+
+# Add your model code and dependencies
+```
+
+<Note>
+`cog init` will not overwrite existing `cog.yaml` or `predict.py` files. If these files already exist, the command will exit without making changes.
+</Note>
+
+## Next Steps
+
+After running `cog init`, you'll want to:
+
+1. **Edit `cog.yaml`** to specify your Python version, system packages, and dependencies
+2. **Edit `predict.py`** to implement your model's prediction logic
+3. **Test your model** with `cog predict`
+
+<CardGroup cols={2}>
+  <Card title="cog.yaml reference" icon="file-code" href="/config/cog-yaml">
+    Learn about all configuration options
+  </Card>
+  <Card title="Python API" icon="python" href="/python/predictor">
+    Define your prediction interface
+  </Card>
+  <Card title="cog predict" icon="play" href="/cli/predict">
+    Test your model locally
+  </Card>
+  <Card title="Your own model guide" icon="flask" href="/guides/your-own-model">
+    Complete setup guide
+  </Card>
+</CardGroup>
+
+## Options
+
+| Flag | Description |
+|------|-------------|
+| `-h`, `--help` | Show help for the init command |
+
+## Related Commands
+
+- [cog build](/cli/build) - Build a Docker image after initialization
+- [cog predict](/cli/predict) - Test your model
+- [cog run](/cli/run) - Run commands in your environment

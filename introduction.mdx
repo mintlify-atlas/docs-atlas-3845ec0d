@@ -46,11 +46,7 @@ Then, Cog generates an OpenAPI schema and validates the inputs and outputs autom
 
 ### Automatic HTTP prediction server
 
-Your model's types are used to dynamically generate a RESTful HTTP API using a high-performance Rust/Axum server.
-
-### Automatic queue worker
-
-Long-running deep learning models or batch processing is best architected with a queue. Cog models do this out of the box. Redis is currently supported, with more in the pipeline.
+Your model's types are used to dynamically generate a RESTful HTTP API using a high-performance Rust/Axum server. The server supports both synchronous and asynchronous predictions with webhooks for long-running models.
 
 ### Ready for production
 

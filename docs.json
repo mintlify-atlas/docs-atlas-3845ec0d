@@ -57,12 +57,14 @@
             "group": "CLI Commands",
             "pages": [
               "cli/overview",
+              "cli/init",
               "cli/build",
               "cli/predict",
               "cli/run",
               "cli/serve",
               "cli/push",
-              "cli/train"
+              "cli/train",
+              "cli/login"
             ]
           },
           {
