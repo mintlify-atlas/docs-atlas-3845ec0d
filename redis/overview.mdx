@@ -1,0 +1,50 @@
+---
+title: Redis Queue Worker
+description: Information about the Redis queue worker in Cog
+---
+
+<Note>
+The Redis queue API is no longer supported and has been removed from Cog.
+</Note>
+
+## Overview
+
+The Redis queue worker functionality that was previously available in Cog has been deprecated and removed. This feature allowed models to process predictions asynchronously using Redis as a message queue backend.
+
+## Migration
+
+If you were using the Redis queue worker in previous versions of Cog, you have several alternatives:
+
+### Use HTTP Endpoints
+
+The standard HTTP server mode provides a synchronous API for running predictions:
+
+```bash
+cog predict
+```
+
+This runs predictions through Cog's HTTP server, which handles requests synchronously and returns results directly.
+
+### External Queue Solutions
+
+For asynchronous processing, you can integrate Cog with external queue systems:
+
+- **Celery** - Python-based distributed task queue
+- **RQ (Redis Queue)** - Simple Python job queue
+- **BullMQ** - Redis-based queue for Node.js applications
+- **Cloud-native queues** - AWS SQS, Google Cloud Tasks, Azure Queue Storage
+
+<Tip>
+When building your own queue integration, use Cog's HTTP API to invoke predictions. This gives you full control over queue behavior, retry logic, and error handling.
+</Tip>
+
+## Deployment Options
+
+For production deployments with built-in queue management, consider:
+
+- **Replicate** - Fully managed platform for running machine learning models with automatic scaling and queue management
+- **Custom infrastructure** - Build your own queue system around Cog's HTTP server using container orchestration platforms like Kubernetes
+
+## Questions?
+
+If you need help migrating away from the Redis queue worker or implementing an alternative solution, please refer to the main Cog documentation or open an issue in the GitHub repository.

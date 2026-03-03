@@ -1,0 +1,158 @@
+---
+title: Installation
+description: Install Cog on macOS, Linux, or Windows
+---
+
+# Installation
+
+Cog works on macOS, Linux, and Windows 11 with WSL 2.
+
+## Prerequisites
+
+Before installing Cog, you'll need:
+
+<Note>
+  **Docker is required.** Cog uses Docker to create containers for your models. You'll need to [install Docker](https://docs.docker.com/get-docker/) before you can run Cog.
+</Note>
+
+<Tip>
+  If you install Docker Engine instead of Docker Desktop, you will need to [install Buildx](https://docs.docker.com/build/architecture/#buildx) as well.
+</Tip>
+
+## macOS Installation
+
+### Using Homebrew (Recommended)
+
+The easiest way to install Cog on macOS is using Homebrew:
+
+```bash
+brew install replicate/tap/cog
+```
+
+This method automatically handles code signing and permissions.
+
+### Using the Install Script
+
+You can also use our install script:
+
+<CodeGroup>
+```bash bash/zsh
+sh <(curl -fsSL https://cog.run/install.sh)
+```
+
+```fish fish shell
+sh (curl -fsSL https://cog.run/install.sh | psub)
+```
+
+```bash wget
+wget -qO- https://cog.run/install.sh
+sh ./install.sh
+```
+</CodeGroup>
+
+### Manual Installation
+
+Download and install the latest release directly from GitHub:
+
+```bash
+sudo curl -o /usr/local/bin/cog -L "https://github.com/replicate/cog/releases/latest/download/cog_$(uname -s)_$(uname -m)"
+sudo chmod +x /usr/local/bin/cog
+```
+
+<Note>
+  **macOS Security Warning**
+  
+  If you downloaded the binary manually and see a "cannot be opened because the developer cannot be verified" error, run:
+  
+  ```bash
+  sudo xattr -d com.apple.quarantine /usr/local/bin/cog
+  ```
+  
+  Installing via Homebrew handles this automatically.
+</Note>
+
+## Linux Installation
+
+### Using the Install Script
+
+Download and run the install script:
+
+```bash
+sh <(curl -fsSL https://cog.run/install.sh)
+```
+
+### Manual Installation
+
+Download the binary directly:
+
+```bash
+sudo curl -o /usr/local/bin/cog -L "https://github.com/replicate/cog/releases/latest/download/cog_$(uname -s)_$(uname -m)"
+sudo chmod +x /usr/local/bin/cog
+```
+
+### Docker Container Installation
+
+If you're installing Cog inside a Docker container:
+
+```dockerfile
+RUN sh -c "INSTALL_DIR=\"/usr/local/bin\" SUDO=\"\" $(curl -fsSL https://cog.run/install.sh)"
+```
+
+## Windows Installation
+
+Cog works on Windows 11 with WSL 2 (Windows Subsystem for Linux).
+
+<Steps>
+  <Step title="Install WSL 2">
+    Follow the [official WSL 2 installation guide](https://docs.microsoft.com/en-us/windows/wsl/install) from Microsoft.
+  </Step>
+  
+  <Step title="Install Docker Desktop">
+    Install [Docker Desktop for Windows](https://docs.docker.com/desktop/install/windows-install/) and ensure WSL 2 integration is enabled.
+  </Step>
+  
+  <Step title="Install Cog in WSL">
+    Open your WSL terminal and follow the Linux installation instructions:
+    
+    ```bash
+    sh <(curl -fsSL https://cog.run/install.sh)
+    ```
+  </Step>
+</Steps>
+
+For detailed WSL 2 setup instructions, see the [Using Cog with Windows 11 guide](https://github.com/replicate/cog/blob/main/docs/wsl2/wsl2.md).
+
+## Upgrading Cog
+
+### Homebrew
+
+If you installed with Homebrew on macOS:
+
+```bash
+brew upgrade replicate/tap/cog
+```
+
+### Other Methods
+
+For all other installation methods, upgrade by running the same commands you used to install Cog. The install script and manual download will always fetch the latest version.
+
+## Verify Installation
+
+Verify that Cog is installed correctly:
+
+```bash
+cog --version
+```
+
+You should see the version number printed.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Run your first prediction with Cog
+  </Card>
+  <Card title="Your Own Model" icon="code" href="/guides/your-own-model">
+    Package your own model with Cog
+  </Card>
+</CardGroup>

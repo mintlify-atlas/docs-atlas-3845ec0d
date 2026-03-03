@@ -1,0 +1,205 @@
+---
+title: Webhooks
+description: Receive real-time updates about prediction status
+---
+
+You can provide a `webhook` parameter in the client request body when creating a prediction. The server makes HTTP requests to the provided URL with the current state of the prediction object in the request body.
+
+## Basic Usage
+
+```bash
+curl http://localhost:5001/predictions -X POST \
+    --header "Content-Type: application/json" \
+    --header "Prefer: respond-async" \
+    --data '{
+      "input": {"prompt": "A picture of an onion with sunglasses"},
+      "webhook": "https://example.com/webhook/prediction"
+    }'
+```
+
+<ParamField body="webhook" type="string" required>
+URL where webhook notifications will be sent. The server will make POST requests to this URL with the prediction state in the request body.
+</ParamField>
+
+<ParamField body="webhook_events_filter" type="array">
+Array of event types to trigger webhook notifications. Valid values: `start`, `output`, `logs`, `completed`. If not specified, all event types will trigger webhooks.
+</ParamField>
+
+## Webhook Events
+
+The server makes requests to the provided URL at the following times:
+
+<ParamField name="start" type="event">
+Sent once when the prediction starts (`status` is `starting`).
+
+**Timing:** Sent immediately.
+</ParamField>
+
+<ParamField name="output" type="event">
+Sent each time the predict function generates an output (either once using `return` or multiple times using `yield`).
+
+**Timing:** Sent at most once every 500ms. This interval is not configurable.
+</ParamField>
+
+<ParamField name="logs" type="event">
+Sent each time the predict function writes to `stdout`.
+
+**Timing:** Sent at most once every 500ms. This interval is not configurable.
+</ParamField>
+
+<ParamField name="completed" type="event">
+Sent once when the prediction reaches a terminal state (`status` is `succeeded`, `canceled`, or `failed`).
+
+**Timing:** Sent immediately.
+</ParamField>
+
+## Event Filtering
+
+By default, the server sends requests for all event types. Clients can specify which events trigger webhook requests with the `webhook_events_filter` parameter in the prediction request body.
+
+For example, the following request specifies that webhooks are sent by the server only at the start and end of the prediction:
+
+```bash
+curl http://localhost:5001/predictions -X POST \
+    --header "Content-Type: application/json" \
+    --header "Prefer: respond-async" \
+    --data '{
+      "input": {"prompt": "A picture of an onion with sunglasses"},
+      "webhook": "https://example.com/webhook/prediction",
+      "webhook_events_filter": ["start", "completed"]
+    }'
+```
+
+## Webhook Payload
+
+The webhook request body contains the current state of the prediction object. The exact fields depend on the prediction status and your model's schema.
+
+### Example: Start Event
+
+```json
+{
+    "id": "wjx3whax6rf4vphkegkhcvpv6a",
+    "status": "starting",
+    "input": {
+        "prompt": "A picture of an onion with sunglasses"
+    },
+    "created_at": "2025-01-01T00:00:00.000000+00:00"
+}
+```
+
+### Example: Output Event
+
+```json
+{
+    "id": "wjx3whax6rf4vphkegkhcvpv6a",
+    "status": "processing",
+    "input": {
+        "prompt": "A picture of an onion with sunglasses"
+    },
+    "output": "data:image/png;base64,...",
+    "created_at": "2025-01-01T00:00:00.000000+00:00"
+}
+```
+
+### Example: Logs Event
+
+```json
+{
+    "id": "wjx3whax6rf4vphkegkhcvpv6a",
+    "status": "processing",
+    "input": {
+        "prompt": "A picture of an onion with sunglasses"
+    },
+    "logs": "Processing image...\nGenerating output...\n",
+    "created_at": "2025-01-01T00:00:00.000000+00:00"
+}
+```
+
+### Example: Completed Event (Success)
+
+```json
+{
+    "id": "wjx3whax6rf4vphkegkhcvpv6a",
+    "status": "succeeded",
+    "input": {
+        "prompt": "A picture of an onion with sunglasses"
+    },
+    "output": "data:image/png;base64,...",
+    "logs": "Processing image...\nGenerating output...\nDone!\n",
+    "metrics": {
+        "predict_time": 4.52
+    },
+    "created_at": "2025-01-01T00:00:00.000000+00:00",
+    "completed_at": "2025-01-01T00:00:04.520000+00:00"
+}
+```
+
+### Example: Completed Event (Failure)
+
+```json
+{
+    "id": "wjx3whax6rf4vphkegkhcvpv6a",
+    "status": "failed",
+    "input": {
+        "prompt": "A picture of an onion with sunglasses"
+    },
+    "error": "Out of memory",
+    "logs": "Processing image...\nError: Out of memory\n",
+    "created_at": "2025-01-01T00:00:00.000000+00:00",
+    "completed_at": "2025-01-01T00:00:02.100000+00:00"
+}
+```
+
+## Webhook Timing
+
+Webhook requests for `start` and `completed` event types are sent immediately.
+
+Webhook requests for `output` and `logs` event types are sent at most once every 500ms. This interval is not configurable.
+
+<Note>
+The only supported way to receive updates on the status of predictions started asynchronously is using webhooks. Polling for prediction status is not currently supported.
+</Note>
+
+## Response Fields
+
+<ResponseField name="id" type="string">
+Unique identifier for the prediction (if provided when creating the prediction).
+</ResponseField>
+
+<ResponseField name="status" type="string" required>
+Current prediction status. One of: `starting`, `processing`, `succeeded`, `failed`, or `canceled`.
+</ResponseField>
+
+<ResponseField name="input" type="object" required>
+The input parameters provided when creating the prediction.
+</ResponseField>
+
+<ResponseField name="output" type="any">
+The output from the prediction. Only present after output is generated.
+</ResponseField>
+
+<ResponseField name="logs" type="string">
+Logs captured from the prediction. Updated incrementally as the prediction runs.
+</ResponseField>
+
+<ResponseField name="error" type="string">
+Error message if the prediction failed.
+</ResponseField>
+
+<ResponseField name="metrics" type="object">
+Prediction metrics (only present on completion).
+
+<Expandable title="metrics properties">
+<ResponseField name="predict_time" type="number">
+Elapsed time in seconds for the prediction.
+</ResponseField>
+</Expandable>
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+ISO 8601 timestamp of when the prediction was created.
+</ResponseField>
+
+<ResponseField name="completed_at" type="string">
+ISO 8601 timestamp of when the prediction completed (only present on completion).
+</ResponseField>

@@ -1,0 +1,142 @@
+---
+title: Deploying Models
+description: Deploy Cog models as Docker containers with HTTP APIs
+---
+
+Cog containers are Docker containers that serve an HTTP API for running predictions on your model. You can deploy them anywhere that Docker containers run.
+
+<Note>
+  This guide assumes you have a model packaged with Cog. If you don't, follow the [setting up your own model guide](/guides/your-own-model) or use an [example model](https://github.com/replicate/cog-examples).
+</Note>
+
+## Getting Started
+
+<Steps>
+  <Step title="Build your model">
+    First, build your model into a Docker image:
+
+    ```bash
+    cog build -t my-model
+    ```
+
+    This creates a Docker image tagged as `my-model` containing your model and all its dependencies.
+  </Step>
+
+  <Step title="Start the Docker container">
+    Run the container with the appropriate configuration for your model:
+
+    ```bash
+    # If your model uses a CPU:
+    docker run -d -p 5001:5000 my-model
+
+    # If your model uses a GPU:
+    docker run -d -p 5001:5000 --gpus all my-model
+
+    # If you're on an M1 Mac:
+    docker run -d -p 5001:5000 --platform=linux/amd64 my-model
+    ```
+
+    <Note>
+      The `-d` flag runs the container in detached mode. The `-p 5001:5000` flag maps port 5000 from the container to port 5001 on your host machine.
+    </Note>
+  </Step>
+
+  <Step title="Verify the server is running">
+    The server is now running locally on port 5001. View the OpenAPI schema to confirm:
+
+    ```bash
+    curl http://localhost:5001/openapi.json
+    ```
+
+    You can also open [http://localhost:5001/openapi.json](http://localhost:5001/openapi.json) in your browser.
+  </Step>
+</Steps>
+
+## Running Predictions
+
+To run a prediction, call the `/predictions` endpoint with a POST request:
+
+```bash
+curl http://localhost:5001/predictions -X POST \
+    --header "Content-Type: application/json" \
+    --data '{"input": {"image": "https://.../input.jpg"}}'
+```
+
+<Tip>
+  The input format depends on your model's prediction interface. Check your `predict.py` file to see what inputs your model expects.
+</Tip>
+
+For complete details about the HTTP API, see the [HTTP API reference](/http/overview).
+
+## Managing the Server
+
+### Stop the server
+
+To stop the running container:
+
+```bash
+docker kill my-model
+```
+
+### View logs
+
+To view the server logs:
+
+```bash
+docker logs my-model
+```
+
+### Restart the server
+
+To restart the container:
+
+```bash
+docker restart my-model
+```
+
+## Server Configuration
+
+Cog Docker images have `python -m cog.server.http` set as the default command. When using command-line options, pass the full command before the options.
+
+### Controlling Threads
+
+The `--threads` option controls how many requests Cog serves in parallel:
+
+- **CPU models**: Defaults to the number of CPUs on your machine
+- **GPU models**: Defaults to 1 (GPUs typically can only be used by one process)
+
+```bash
+docker run -d -p 5000:5000 my-model python -m cog.server.http --threads=10
+```
+
+<Warning>
+  Adjust the thread count to control memory usage and resource constraints. Setting too many threads may cause out-of-memory errors.
+</Warning>
+
+### Custom Host Configuration
+
+By default, Cog serves on `0.0.0.0`. Use the `--host` option to override:
+
+```bash
+# Serve on an IPv6 address:
+docker run -d -p 5000:5000 my-model python -m cog.server.http --host="::"
+```
+
+## Deployment Options
+
+Since Cog models are standard Docker containers, you can deploy them to any platform that supports Docker:
+
+- **Cloud platforms**: AWS ECS, Google Cloud Run, Azure Container Instances
+- **Kubernetes**: Any Kubernetes cluster
+- **Serverless**: AWS Lambda (with container support), Google Cloud Functions
+- **Replicate**: Deploy directly to Replicate's managed infrastructure
+
+<Tip>
+  When deploying to production, consider adding health checks, monitoring, and auto-scaling based on your platform's capabilities.
+</Tip>
+
+## Next Steps
+
+- Learn about the [HTTP API](/http/overview) for making predictions
+- See [example deployments](https://github.com/replicate/cog-examples) for different platforms
+- Explore the [Python API reference](/python/predictor) for advanced features

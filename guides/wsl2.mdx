@@ -1,0 +1,233 @@
+---
+title: Using Cog on Windows with WSL2
+description: Run Cog on Windows 11 with GPU support using WSL2
+---
+
+Running Cog on Windows is possible thanks to WSL2. This guide shows you how to enable WSL2 and GPU passthrough on Windows 11.
+
+<Warning>
+  Windows 10 is not officially supported, as you need to be on an insider build to use GPU passthrough.
+</Warning>
+
+## Prerequisites
+
+Before beginning installation, ensure you have:
+
+- **Windows 11** (Windows 10 is not officially supported)
+- **NVIDIA GPU** from one of these series:
+  - RTX 2000/3000 series
+  - Kepler/Tesla/Volta/Ampere series
+  
+<Note>
+  Other GPU configurations are not guaranteed to work.
+</Note>
+
+## Installation
+
+<Steps>
+  <Step title="Install the GPU driver">
+    Download and install the latest Game Ready drivers for your NVIDIA GPU from [NVIDIA's website](https://www.nvidia.com/download/index.aspx).
+
+    Select your GPU model from the dropdown menus, click "Search", and follow the installation wizard.
+
+    <Warning>
+      Restart your computer once the driver installation is complete.
+    </Warning>
+  </Step>
+
+  <Step title="Enable WSL2">
+    Open Windows Terminal as an administrator:
+    - Search for "Terminal" in the Start menu
+    - Right click and select "Run as administrator"
+
+    Run the following PowerShell command:
+
+    ```powershell
+    dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
+    ```
+
+    <Tip>
+      If you see a permissions error, ensure you're running as administrator and have administrator-level privileges.
+    </Tip>
+  </Step>
+
+  <Step title="Enable virtualization">
+    In the same administrator terminal, run:
+
+    ```powershell
+    dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
+    ```
+
+    If this command fails, [enable virtualization capabilities](https://docs.microsoft.com/en-us/windows/wsl/troubleshooting#error-0x80370102-the-virtual-machine-could-not-be-started-because-a-required-feature-is-not-installed) in your computer's BIOS/UEFI.
+
+    A successful output will print `The operation completed successfully.`
+  </Step>
+
+  <Step title="Reboot your computer">
+    Restart Windows to enable WSL2 and virtualization features.
+  </Step>
+
+  <Step title="Update the Linux kernel">
+    Download and run the [WSL2 Linux kernel update package](https://wslstorestorage.blob.core.windows.net/wslblob/wsl_update_x64.msi) for x64 machines.
+
+    When prompted for elevated permissions, click 'yes' to approve.
+
+    Verify the kernel version by opening Windows Terminal as administrator and running:
+
+    ```powershell
+    wsl cat /proc/version
+    ```
+
+    You should see output like:
+
+    ```bash
+    Linux version 5.10.102.1-microsoft-standard-WSL2 (oe-user@oe-host) (x86_64-msft-linux-gcc (GCC) 9.3.0, GNU ld (GNU Binutils) 2.34.0.20200220)
+    ```
+
+    <Note>
+      The kernel version should be at least `5.10.43.3`. If it's not, open Settings → Windows Update → Advanced options and enable "Receive updates for other Microsoft products", then check for updates.
+    </Note>
+  </Step>
+
+  <Step title="Configure WSL 2 as default">
+    Set WSL 2 as the default version in Windows Terminal with administrator privileges:
+
+    ```powershell
+    wsl --set-default-version 2
+    ```
+  </Step>
+
+  <Step title="Install Ubuntu">
+    Go to the Microsoft Store and [download Ubuntu 18.04](https://www.microsoft.com/store/apps/9N9TNGVNDL3Q).
+
+    Launch the "Ubuntu" app from your Start Menu and create a Linux user account when prompted.
+  </Step>
+
+  <Step title="Configure CUDA Toolkit">
+    Open PowerShell or Windows Command Prompt in administrator mode and enter:
+
+    ```powershell
+    wsl.exe
+    ```
+
+    This drops you into your Linux VM. Run the following commands to install the CUDA Toolkit for WSL-Ubuntu:
+
+    ```bash
+    sudo apt-key del 7fa2af80 # if this fails, you may remove it
+    wget https://developer.download.nvidia.com/compute/cuda/repos/wsl-ubuntu/x86_64/cuda-wsl-ubuntu.pin
+    sudo mv cuda-wsl-ubuntu.pin /etc/apt/preferences.d/cuda-repository-pin-600
+    wget https://developer.download.nvidia.com/compute/cuda/11.7.0/local_installers/cuda-repo-wsl-ubuntu-11-7-local_11.7.0-1_amd64.deb
+    sudo dpkg -i cuda-repo-wsl-ubuntu-11-7-local_11.7.0-1_amd64.deb
+    sudo apt-get update
+    sudo apt-get -y install cuda-toolkit-11-7
+    ```
+
+    <Warning>
+      Always use the WSL-Ubuntu CUDA Toolkit package, not generic Linux installation instructions. The CUDA version above may need to be adjusted based on your GPU's capabilities.
+    </Warning>
+  </Step>
+
+  <Step title="Install Docker Desktop">
+    Download and install [Docker Desktop for Windows](https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe).
+
+    After installation:
+    1. Run Docker Desktop
+    2. Go to **Settings → General**
+    3. Ensure **Use the WSL 2 based engine** is checked
+    4. Click **Apply & Restart**
+
+    <Tip>
+      Reboot your computer one more time after configuring Docker Desktop.
+    </Tip>
+  </Step>
+
+  <Step title="Install Cog">
+    Open Windows Terminal and enter your WSL 2 VM:
+
+    ```powershell
+    wsl.exe
+    ```
+
+    Download and install Cog inside the VM:
+
+    ```bash
+    sudo curl -o /usr/local/bin/cog -L https://github.com/replicate/cog/releases/latest/download/cog_`uname -s`_`uname -m`
+    sudo chmod +x /usr/local/bin/cog
+    ```
+
+    Verify the installation:
+
+    ```bash
+    which cog        # should output /usr/local/bin/cog
+    cog --version    # should output the cog version number
+    ```
+  </Step>
+</Steps>
+
+## Running Your First Model
+
+Test your setup by running a model:
+
+```bash
+cog predict 'r8.im/afiaka87/glid-3-xl' -i prompt="a fresh avocado floating in the water" -o prediction.json
+```
+
+<Tip>
+  While your prediction runs, use Task Manager to monitor GPU memory consumption. The model output will be saved as JSON for complex return types.
+</Tip>
+
+### Processing the Output
+
+If your model returns base64-encoded images, use `jq` to convert them:
+
+```bash
+# Install jq
+sudo apt install jq
+
+# Convert base64 to PNG
+jq -cs '.[0][0][0]' prediction.json | cut --delimiter "," --field 2 | base64 --ignore-garbage --decode > prediction.png
+```
+
+### Viewing Results
+
+WSL 2 allows you to access Windows binaries with the `.exe` extension:
+
+```bash
+explorer.exe prediction.png
+```
+
+## Troubleshooting
+
+### GPU not detected
+
+If your GPU isn't detected:
+1. Verify NVIDIA drivers are installed on Windows (not in WSL)
+2. Check that virtualization is enabled in BIOS
+3. Ensure WSL 2 is the default version: `wsl --set-default-version 2`
+
+### Docker errors
+
+If Docker commands fail:
+1. Verify Docker Desktop is running
+2. Check that WSL 2 backend is enabled in Docker settings
+3. Restart Docker Desktop
+
+### CUDA errors
+
+<Warning>
+  Never install CUDA using generic Linux instructions in WSL 2. Always use the WSL-Ubuntu CUDA Toolkit package.
+</Warning>
+
+## References
+
+- [NVIDIA CUDA WSL User Guide](https://docs.nvidia.com/cuda/wsl-user-guide/index.html)
+- [NVIDIA CUDA Downloads](https://developer.nvidia.com/cuda-downloads?target_os=Linux&target_arch=x86_64&Distribution=WSL-Ubuntu&target_version=2.0)
+- [Docker WSL 2 GPU Support](https://www.docker.com/blog/wsl-2-gpu-support-for-docker-desktop-on-nvidia-gpus/)
+- [WSL Installation Guide](https://docs.microsoft.com/en-us/windows/wsl/install-manual)
+- [Cog GitHub Repository](https://github.com/replicate/cog)
+
+## Next Steps
+
+- Learn about [setting up your own model](/guides/your-own-model)
+- Explore [deploying models](/guides/deploying) to production
+- See the [cog.yaml reference](/config/cog-yaml) for configuration options

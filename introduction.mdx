@@ -1,0 +1,115 @@
+---
+title: Cog - Containers for Machine Learning
+description: Package machine learning models in production-ready containers
+---
+
+# Cog: Containers for Machine Learning
+
+Cog is an open-source tool that lets you package machine learning models in a standard, production-ready container.
+
+You can deploy your packaged model to your own infrastructure, or to [Replicate](https://replicate.com/).
+
+## Why Cog?
+
+It's really hard for researchers to ship machine learning models to production. Part of the solution is Docker, but it is so complex to get it to work: Dockerfiles, pre-/post-processing, Flask servers, CUDA versions. More often than not the researcher has to sit down with an engineer to get the damn thing deployed.
+
+Cog solves this by providing a simple interface to package your model with all its dependencies, automatically handling the complexity of Docker, CUDA, and production serving.
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install Cog on macOS, Linux, or Windows with WSL2
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Run your first prediction in under 5 minutes
+  </Card>
+  <Card title="YAML Reference" icon="file-code" href="/config/cog-yaml">
+    Learn how to configure your model's environment
+  </Card>
+  <Card title="Python API" icon="code" href="/python/predictor">
+    Define predictions with the Predictor interface
+  </Card>
+</CardGroup>
+
+## Key Features
+
+### Docker containers without the pain
+
+Writing your own `Dockerfile` can be a bewildering process. With Cog, you define your environment with a simple configuration file and it generates a Docker image with all the best practices: Nvidia base images, efficient caching of dependencies, installing specific Python versions, sensible environment variable defaults, and so on.
+
+### No more CUDA hell
+
+Cog knows which CUDA/cuDNN/PyTorch/Tensorflow/Python combos are compatible and will set it all up correctly for you.
+
+### Define inputs and outputs with standard Python
+
+Then, Cog generates an OpenAPI schema and validates the inputs and outputs automatically.
+
+### Automatic HTTP prediction server
+
+Your model's types are used to dynamically generate a RESTful HTTP API using a high-performance Rust/Axum server.
+
+### Automatic queue worker
+
+Long-running deep learning models or batch processing is best architected with a queue. Cog models do this out of the box. Redis is currently supported, with more in the pipeline.
+
+### Ready for production
+
+Deploy your model anywhere that Docker images run. Your own infrastructure, or [Replicate](https://replicate.com).
+
+## Quick Example
+
+Define the Docker environment your model runs in with `cog.yaml`:
+
+```yaml
+build:
+  gpu: true
+  system_packages:
+    - "libgl1-mesa-glx"
+    - "libglib2.0-0"
+  python_version: "3.12"
+  python_requirements: requirements.txt
+predict: "predict.py:Predictor"
+```
+
+Define how predictions are run on your model with `predict.py`:
+
+```python
+from cog import BasePredictor, Input, Path
+import torch
+
+class Predictor(BasePredictor):
+    def setup(self):
+        """Load the model into memory to make running multiple predictions efficient"""
+        self.model = torch.load("./weights.pth")
+
+    def predict(self,
+          image: Path = Input(description="Grayscale input image")
+    ) -> Path:
+        """Run a single prediction on the model"""
+        processed_image = preprocess(image)
+        output = self.model(processed_image)
+        return postprocess(output)
+```
+
+Now, you can run predictions on this model:
+
+```bash
+cog predict -i image=@input.jpg
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Get Started" icon="play" href="/quickstart">
+    Follow our quickstart guide to run your first model
+  </Card>
+  <Card title="Deploy Models" icon="cloud" href="/guides/deploying">
+    Learn how to deploy your packaged models
+  </Card>
+  <Card title="Examples" icon="code-branch" href="https://github.com/replicate/cog-examples">
+    Browse example models built with Cog
+  </Card>
+  <Card title="Join Discord" icon="discord" href="https://discord.gg/replicate">
+    Get help from the community in #cog
+  </Card>
+</CardGroup>

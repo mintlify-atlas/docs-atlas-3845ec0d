@@ -1,0 +1,494 @@
+---
+title: cog serve
+description: Run a prediction HTTP server
+---
+
+Run a prediction HTTP server. Builds the model and starts an HTTP server that exposes the model's inputs and outputs as a REST API. Compatible with the Cog HTTP protocol.
+
+## Usage
+
+```bash
+cog serve [flags]
+```
+
+## Flags
+
+<ParamField path="-p, --port" type="integer" default="8393">
+  Port on which to listen
+  
+  ```bash
+  cog serve -p 5000
+  ```
+</ParamField>
+
+<ParamField path="-f, --file" type="string" default="cog.yaml">
+  The name of the config file
+  
+  ```bash
+  cog serve -f custom-config.yaml
+  ```
+</ParamField>
+
+<ParamField path="--gpus" type="string">
+  GPU devices to add to the container, in the same format as `docker run --gpus`
+  
+  ```bash
+  cog serve --gpus all
+  ```
+</ParamField>
+
+<ParamField path="--upload-url" type="string">
+  Upload URL for file outputs (e.g., `https://example.com/upload/`). When specified, the server uploads file outputs to this URL instead of returning them directly.
+  
+  ```bash
+  cog serve --upload-url https://example.com/upload/
+  ```
+</ParamField>
+
+<ParamField path="--progress" type="string" default="auto">
+  Set type of build progress output: `auto`, `tty`, `plain`, or `quiet`
+</ParamField>
+
+<ParamField path="--use-cog-base-image" type="boolean" default="true">
+  Use pre-built Cog base image for faster cold boots
+</ParamField>
+
+<ParamField path="--use-cuda-base-image" type="string" default="auto">
+  Use Nvidia CUDA base image: `true`, `false`, or `auto`
+</ParamField>
+
+## Examples
+
+### Start the server on default port
+
+```bash
+cog serve
+```
+
+Output:
+```
+Building Docker image from environment in cog.yaml...
+
+[+] Building 2.1s (12/12) FINISHED
+
+Running 'python --check-hash-based-pycs never -m cog.server.http --await-explicit-shutdown true' in Docker with the current directory mounted as a volume...
+
+Serving at http://127.0.0.1:8393
+
+INFO:     Started server process
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:5000
+```
+
+The server is now running and ready to accept prediction requests.
+
+### Start on a custom port
+
+```bash
+cog serve -p 5000
+```
+
+Access the server at `http://localhost:5000`.
+
+### Test the server
+
+Make a prediction request:
+
+```bash
+curl http://localhost:8393/predictions \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  -d '{"input": {"prompt": "a cat"}}'
+```
+
+Response:
+```json
+{
+  "id": "abc123",
+  "status": "succeeded",
+  "input": {
+    "prompt": "a cat"
+  },
+  "output": "A fluffy orange tabby cat sitting on a windowsill",
+  "logs": "",
+  "error": null,
+  "created_at": "2024-01-15T10:30:00.000Z",
+  "started_at": "2024-01-15T10:30:00.100Z",
+  "completed_at": "2024-01-15T10:30:02.500Z"
+}
+```
+
+### Send a file input
+
+```bash
+curl http://localhost:8393/predictions \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  -d '{"input": {"image": "https://example.com/photo.jpg"}}'
+```
+
+Or with a base64-encoded file:
+
+```bash
+curl http://localhost:8393/predictions \
+  -X POST \
+  -H 'Content-Type: application/json' \
+  -d @- <<EOF
+{
+  "input": {
+    "image": "data:image/jpeg;base64,$(base64 -i photo.jpg)"
+  }
+}
+EOF
+```
+
+### Check server health
+
+```bash
+curl http://localhost:8393/health-check
+```
+
+Response:
+```json
+{"status": "READY"}
+```
+
+### Get OpenAPI schema
+
+```bash
+curl http://localhost:8393/openapi.json
+```
+
+Returns the full OpenAPI specification for your model's API.
+
+## API Endpoints
+
+The server exposes these endpoints:
+
+### POST /predictions
+
+Create a prediction.
+
+**Request:**
+```json
+{
+  "input": {
+    "prompt": "a photo of a cat",
+    "width": 1024,
+    "height": 768
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "id": "abc123",
+  "status": "succeeded",
+  "input": {...},
+  "output": "...",
+  "logs": "",
+  "error": null,
+  "created_at": "2024-01-15T10:30:00.000Z",
+  "started_at": "2024-01-15T10:30:00.100Z",
+  "completed_at": "2024-01-15T10:30:02.500Z"
+}
+```
+
+### GET /health-check
+
+Check if the server is ready.
+
+**Response:**
+```json
+{"status": "READY"}
+```
+
+### GET /openapi.json
+
+Get the OpenAPI schema.
+
+**Response:** Full OpenAPI 3.0 specification
+
+### POST /shutdown
+
+Shutdown the server gracefully.
+
+## Input Types
+
+The server handles various input types:
+
+### Strings
+
+```json
+{"input": {"prompt": "hello world"}}
+```
+
+### Numbers
+
+```json
+{"input": {"width": 1024, "temperature": 0.8}}
+```
+
+### Booleans
+
+```json
+{"input": {"use_refiner": true}}
+```
+
+### Files (URLs)
+
+```json
+{"input": {"image": "https://example.com/photo.jpg"}}
+```
+
+### Files (base64 data URLs)
+
+```json
+{"input": {"image": "data:image/jpeg;base64,/9j/4AAQ..."}}
+```
+
+### Arrays
+
+```json
+{"input": {"images": [
+  "https://example.com/photo1.jpg",
+  "https://example.com/photo2.jpg"
+]}}
+```
+
+## Output Types
+
+### Strings
+
+```json
+{"output": "Generated text"}
+```
+
+### Numbers/Booleans
+
+```json
+{"output": 42}
+{"output": true}
+```
+
+### Files
+
+Returned as data URLs:
+
+```json
+{"output": "data:image/png;base64,iVBORw0KGgo..."}
+```
+
+With `--upload-url`, files are uploaded and returned as URLs:
+
+```json
+{"output": "https://example.com/outputs/abc123.png"}
+```
+
+### Arrays
+
+```json
+{"output": [
+  "data:image/png;base64,iVBORw0KGgo...",
+  "data:image/png;base64,iVBORw0KGgo..."
+]}
+```
+
+### Objects
+
+```json
+{"output": {
+  "result": "success",
+  "score": 0.95
+}}
+```
+
+## Error Handling
+
+When predictions fail, the response includes error details:
+
+```json
+{
+  "id": "abc123",
+  "status": "failed",
+  "error": "Invalid input: prompt must not be empty",
+  "logs": "...",
+  "created_at": "2024-01-15T10:30:00.000Z",
+  "started_at": "2024-01-15T10:30:00.100Z",
+  "completed_at": "2024-01-15T10:30:00.200Z"
+}
+```
+
+## File Upload Configuration
+
+### Default behavior
+
+By default, file outputs are returned as base64 data URLs in the response:
+
+```bash
+cog serve
+```
+
+### With upload URL
+
+Files are uploaded to the specified URL:
+
+```bash
+cog serve --upload-url https://example.com/upload/
+```
+
+The server:
+1. Generates the output file
+2. POSTs it to the upload URL
+3. Returns the URL in the response
+
+This is useful for:
+- Large files that exceed response size limits
+- External storage systems
+- CDN integration
+
+## GPU Configuration
+
+Cog automatically detects GPU requirements:
+
+```bash
+# Auto-detected from cog.yaml
+cog serve
+
+# Explicitly use all GPUs
+cog serve --gpus all
+
+# Use specific GPUs
+cog serve --gpus '"device=0,1"'
+
+# Disable GPU
+cog serve --gpus ""
+```
+
+## Development Workflow
+
+### Local development
+
+1. Start the server:
+   ```bash
+   cog serve
+   ```
+
+2. Make changes to your code
+
+3. Restart the server (Ctrl+C, then `cog serve` again)
+
+4. Test with curl or your application
+
+### Hot reloading
+
+The current directory is mounted as a volume, so you can:
+- Edit Python files
+- Restart the server to pick up changes
+- No need to rebuild the Docker image
+
+## Integration Examples
+
+### Python client
+
+```python
+import requests
+
+response = requests.post(
+    "http://localhost:8393/predictions",
+    json={"input": {"prompt": "a cat"}}
+)
+print(response.json())
+```
+
+### JavaScript client
+
+```javascript
+const response = await fetch('http://localhost:8393/predictions', {
+  method: 'POST',
+  headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({
+    input: {prompt: 'a cat'}
+  })
+});
+const prediction = await response.json();
+console.log(prediction);
+```
+
+### Using the Replicate client
+
+```python
+import replicate
+
+# Point to local server
+replicate.Client(api_url="http://localhost:8393")
+
+output = replicate.run(
+    "local",
+    input={"prompt": "a cat"}
+)
+```
+
+## Logs
+
+Server logs include:
+- Request details
+- Prediction timing
+- Your model's print statements
+- Error traces
+
+View logs in the terminal where you ran `cog serve`.
+
+## Shutdown
+
+Gracefully shutdown the server:
+
+```bash
+# From the terminal
+Ctrl+C
+```
+
+Or programmatically:
+
+```bash
+curl -X POST http://localhost:8393/shutdown
+```
+
+## How It Works
+
+1. **Build phase**:
+   - Reads `cog.yaml`
+   - Builds a Docker image
+   - Mounts current directory as a volume
+
+2. **Server startup**:
+   - Starts the Cog HTTP server (Rust/Axum)
+   - Runs your model's `setup()` method
+   - Begins listening on specified port
+
+3. **Prediction handling**:
+   - Receives HTTP requests
+   - Validates inputs against schema
+   - Runs your `predict()` method
+   - Returns formatted output
+
+4. **Shutdown**:
+   - Handles graceful shutdown
+   - Cleans up resources
+
+## Performance
+
+The Cog HTTP server is built with Rust for high performance:
+- Low latency request handling
+- Efficient memory usage
+- Automatic request queuing
+- WebSocket support for streaming
+
+## See Also
+
+- [cog predict](/cli/predict) - Run one-off predictions
+- [HTTP API reference](/http) - Full API documentation
+- [cog build](/cli/build) - Build production images
+- [cog push](/cli/push) - Deploy to production

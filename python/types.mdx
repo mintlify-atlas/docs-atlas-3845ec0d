@@ -1,0 +1,513 @@
+---
+title: "Input/Output Types"
+description: "Type system for predictor inputs and outputs"
+---
+
+## Overview
+
+Cog uses Python type annotations to define predictor inputs and outputs. All parameters in `predict()` and `train()` methods must be annotated with types.
+
+## Primitive Types
+
+Supported primitive types:
+
+- `str` - String
+- `int` - Integer
+- `float` - Floating point number
+- `bool` - Boolean
+
+```python
+from cog import BasePredictor, Input
+
+class Predictor(BasePredictor):
+    def predict(
+        self,
+        text: str = Input(description="Input text"),
+        count: int = Input(default=10, ge=1),
+        temperature: float = Input(default=0.7, ge=0.0, le=2.0),
+        enabled: bool = Input(default=True)
+    ) -> str:
+        return f"Processed: {text}"
+```
+
+## Input()
+
+The `Input()` function adds metadata and constraints to parameters.
+
+```python
+from cog import Input
+
+Input(
+    default=None,
+    description="Parameter description",
+    ge=0,
+    le=100,
+    min_length=1,
+    max_length=1000,
+    regex="^[a-z]+$",
+    choices=["option1", "option2"],
+    deprecated=False
+)
+```
+
+### Parameters
+
+<ParamField path="default" type="Any">
+  Default value. If not provided, the parameter is required. If explicitly `None`, the parameter is optional.
+</ParamField>
+
+<ParamField path="description" type="str">
+  Human-readable description shown to users
+</ParamField>
+
+<ParamField path="ge" type="int | float">
+  Minimum value (greater than or equal). For `int` and `float` types only.
+</ParamField>
+
+<ParamField path="le" type="int | float">
+  Maximum value (less than or equal). For `int` and `float` types only.
+</ParamField>
+
+<ParamField path="min_length" type="int">
+  Minimum string length. For `str` types only.
+</ParamField>
+
+<ParamField path="max_length" type="int">
+  Maximum string length. For `str` types only.
+</ParamField>
+
+<ParamField path="regex" type="str">
+  Regular expression pattern for validation. For `str` types only.
+</ParamField>
+
+<ParamField path="choices" type="list[str | int]">
+  List of allowed values. For `str` and `int` types only.
+</ParamField>
+
+<ParamField path="deprecated" type="bool">
+  Mark parameter as deprecated. Tools and UIs may warn users.
+</ParamField>
+
+### Examples
+
+```python
+from cog import Input
+
+# Required parameter (no default)
+text: str = Input(description="Input text")
+
+# Optional with default
+count: int = Input(default=10)
+
+# Numeric constraints
+temperature: float = Input(default=0.7, ge=0.0, le=2.0)
+
+# String length constraints
+prompt: str = Input(min_length=1, max_length=1000)
+
+# Pattern matching
+username: str = Input(regex="^[a-z0-9_]+$")
+
+# Enumerated choices
+model: str = Input(
+    default="base",
+    choices=["base", "large", "xl"]
+)
+
+# Deprecated parameter
+old_param: str = Input(
+    description="This parameter is deprecated",
+    deprecated=True,
+    default="default"
+)
+```
+
+<Note>
+Using `Input()` is optional but recommended. You can use plain Python defaults:
+
+```python
+def predict(self, text: str = "default", count: int = 10) -> str:
+    ...
+```
+</Note>
+
+## Path
+
+The `Path` type represents file paths. It can accept local paths or URLs.
+
+```python
+from cog import BasePredictor, Input, Path
+
+class Predictor(BasePredictor):
+    def predict(
+        self,
+        image: Path = Input(description="Input image")
+    ) -> Path:
+        # Path can be used like pathlib.Path
+        with image.open() as f:
+            data = f.read()
+        
+        # Process and save output
+        output_path = Path("/tmp/output.png")
+        save_image(data, output_path)
+        return output_path
+```
+
+### Features
+
+- Subclass of `pathlib.PosixPath` - supports all Path methods
+- Automatically downloads URLs to temporary files
+- Supports `http://`, `https://`, and `data:` URLs
+- Returned files are served as URLs by Cog's HTTP server
+
+### Input Examples
+
+```python
+# Accept an image file
+image: Path = Input(description="Input image")
+
+# Accept a weights file
+weights: Path = Input(description="Model weights")
+
+# Accept a data archive
+data: Path = Input(description="Training data (ZIP)")
+```
+
+### Output Examples
+
+```python
+import tempfile
+from pathlib import Path as PathlibPath
+from cog import Path
+
+# Return a single file
+def predict(self, image: Path) -> Path:
+    output = process(image)
+    output_path = Path("/tmp/output.png")
+    output.save(output_path)
+    return output_path
+
+# Return multiple files
+def predict(self) -> list[Path]:
+    outputs = []
+    for i in range(3):
+        path = Path(f"/tmp/output_{i}.png")
+        generate_image(path, i)
+        outputs.append(path)
+    return outputs
+
+# Use temporary directory
+def predict(self, image: Path) -> Path:
+    output_path = Path(tempfile.mkdtemp()) / "output.png"
+    process(image, output_path)
+    return output_path
+```
+
+<Warning>
+Output files must exist on disk. Cog automatically deletes temporary files after serving them.
+</Warning>
+
+### URLPath Behavior
+
+When a URL is passed as input, Cog creates a `URLPath` that defers downloading:
+
+```python
+from cog import Path
+
+def predict(self, image: Path) -> str:
+    # File is downloaded when first accessed
+    with image.open() as f:
+        data = f.read()
+    
+    # Now it's a local file
+    print(image)  # /tmp/tmpXXXXXX/image.png
+    return "processed"
+```
+
+## File
+
+<Warning>
+`cog.File` is deprecated. Use `Path` instead.
+</Warning>
+
+The `File` type represents file-like objects:
+
+```python
+from cog import BasePredictor, File
+from PIL import Image
+
+class Predictor(BasePredictor):
+    def predict(self, image: File) -> File:
+        pillow_img = Image.open(image)
+        processed = process(pillow_img)
+        return File(processed)
+```
+
+## Secret
+
+The `Secret` type holds sensitive information like API keys.
+
+```python
+from cog import BasePredictor, Secret
+
+class Predictor(BasePredictor):
+    def predict(
+        self,
+        api_key: Secret,
+        prompt: str
+    ) -> str:
+        # Prints '**********'
+        print(api_key)
+        
+        # Get actual value
+        key = api_key.get_secret_value()
+        response = external_api.call(key, prompt)
+        return response
+```
+
+### Features
+
+- Masks value in string representations
+- Access with `get_secret_value()`
+- Marked in OpenAPI with `"format": "password"` and `"x-cog-secret": true`
+- Redacted in Replicate logs and responses
+
+<Warning>
+Passing secrets to untrusted models can result in data disclosure or misuse.
+</Warning>
+
+### Type Signature
+
+```python
+@dataclass(frozen=True)
+class Secret:
+    secret_value: Optional[str] = None
+    
+    def get_secret_value(self) -> Optional[str]:
+        """Return the actual secret value."""
+        ...
+```
+
+## Optional
+
+Use `Optional[T]` for optional parameters:
+
+```python
+from typing import Optional
+from cog import BasePredictor, Input
+
+class Predictor(BasePredictor):
+    def predict(
+        self,
+        prompt: Optional[str] = Input(description="Optional prompt")
+    ) -> str:
+        if prompt is None:
+            return "No prompt provided"
+        return f"Generated from: {prompt}"
+```
+
+<Note>
+`Optional[T]` is equivalent to `Union[T, None]`. When using `default=None`, you should use `Optional[T]` for type safety.
+</Note>
+
+### Type Checker Benefits
+
+```python
+# Without Optional - type checker won't warn about None
+def predict(self, prompt: str = Input(default=None)) -> str:
+    return "hello" + prompt  # TypeError at runtime if prompt is None!
+
+# With Optional - type checker warns
+def predict(self, prompt: Optional[str] = Input(description="Prompt")) -> str:
+    if prompt is None:
+        return "hello"
+    return "hello " + prompt  # Type checker is happy
+```
+
+## List
+
+Accept lists of any supported type:
+
+```python
+from cog import BasePredictor, Path
+
+class Predictor(BasePredictor):
+    def predict(
+        self,
+        images: list[Path],
+        prompts: list[str],
+        weights: list[float]
+    ) -> str:
+        outputs = []
+        for image, prompt, weight in zip(images, prompts, weights):
+            result = process(image, prompt, weight)
+            outputs.append(result)
+        return "\n".join(outputs)
+```
+
+### CLI Usage
+
+Repeat the parameter to build a list:
+
+```bash
+cog predict \
+  -i images=@image1.png \
+  -i images=@image2.png \
+  -i prompts="a cat" \
+  -i prompts="a dog"
+```
+
+### Returning Lists
+
+```python
+def predict(self) -> list[Path]:
+    return [Path("/tmp/out1.png"), Path("/tmp/out2.png")]
+
+def predict(self) -> list[str]:
+    return ["result1", "result2", "result3"]
+
+def predict(self) -> list[int]:
+    return [1, 2, 3, 4, 5]
+```
+
+Files in list outputs are named `output.<index>.<extension>`:
+- `output.0.png`
+- `output.1.png`
+- `output.2.png`
+
+## Iterator Types
+
+Stream outputs using iterators.
+
+### Iterator[T]
+
+For sync predictors:
+
+```python
+from typing import Iterator
+from cog import BasePredictor, Path
+
+class Predictor(BasePredictor):
+    def predict(self, prompt: str) -> Iterator[str]:
+        for token in self.model.generate(prompt):
+            yield token
+    
+    def predict(self, n: int) -> Iterator[Path]:
+        for i in range(n):
+            path = Path(f"/tmp/image_{i}.png")
+            generate_image(path)
+            yield path
+```
+
+### AsyncIterator[T]
+
+For async predictors:
+
+```python
+from typing import AsyncIterator
+from cog import BasePredictor
+
+class Predictor(BasePredictor):
+    async def predict(self, prompt: str) -> AsyncIterator[str]:
+        async for token in self.model.generate_async(prompt):
+            yield token
+```
+
+### ConcatenateIterator[T]
+
+Hints that string output should be concatenated:
+
+```python
+from cog import BasePredictor, ConcatenateIterator
+
+class Predictor(BasePredictor):
+    def predict(self, prompt: str) -> ConcatenateIterator[str]:
+        tokens = ["The", "quick", "brown", "fox"]
+        for token in tokens:
+            yield token + " "
+```
+
+On Replicate, this displays as a single concatenated string instead of a list.
+
+### AsyncConcatenateIterator[T]
+
+Async version of `ConcatenateIterator`:
+
+```python
+from cog import AsyncConcatenateIterator, BasePredictor
+
+class Predictor(BasePredictor):
+    async def predict(self, prompt: str) -> AsyncConcatenateIterator[str]:
+        async for token in generate_tokens(prompt):
+            yield token
+```
+
+## BaseModel
+
+Define structured output types by subclassing `BaseModel`:
+
+```python
+from cog import BaseModel, BasePredictor, Path
+from typing import Optional
+
+class Output(BaseModel):
+    image: Path
+    seed: int
+    nsfw_detected: Optional[bool]
+    metadata: dict
+
+class Predictor(BasePredictor):
+    def predict(self, prompt: str) -> Output:
+        seed = generate_seed()
+        image = self.model.generate(prompt, seed)
+        
+        return Output(
+            image=image,
+            seed=seed,
+            nsfw_detected=False,
+            metadata={"model": "v1.0", "steps": 50}
+        )
+```
+
+### Features
+
+- Automatically converted to dataclasses
+- Support all primitive types, `Path`, `Secret`, lists, and nested objects
+- Optional fields use `Optional[T]`
+
+<Warning>
+For prediction outputs, the class **must** be named `Output`. For training outputs, it **must** be named `TrainingOutput`.
+</Warning>
+
+### Type Signature
+
+```python
+class BaseModel:
+    def __init_subclass__(
+        cls,
+        *,
+        auto_dataclass: bool = True,
+        init: bool = True,
+        **kwargs: object,
+    ) -> None:
+        ...
+```
+
+## Type Summary
+
+| Type | Input | Output | Description |
+|------|-------|--------|-------------|
+| `str` | ✓ | ✓ | String |
+| `int` | ✓ | ✓ | Integer |
+| `float` | ✓ | ✓ | Float |
+| `bool` | ✓ | ✓ | Boolean |
+| `Path` | ✓ | ✓ | File path (local or URL) |
+| `Secret` | ✓ | ✗ | Sensitive string |
+| `File` | ✓ | ✓ | Deprecated file type |
+| `list[T]` | ✓ | ✓ | List of supported types |
+| `Optional[T]` | ✓ | ✓ | Optional value |
+| `Iterator[T]` | ✗ | ✓ | Streaming output (sync) |
+| `AsyncIterator[T]` | ✗ | ✓ | Streaming output (async) |
+| `ConcatenateIterator[str]` | ✗ | ✓ | Concatenated string stream (sync) |
+| `AsyncConcatenateIterator[str]` | ✗ | ✓ | Concatenated string stream (async) |
+| `BaseModel` subclass | ✗ | ✓ | Structured output object |

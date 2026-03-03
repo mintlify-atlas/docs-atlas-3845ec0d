@@ -1,0 +1,100 @@
+---
+title: Private Package Registry
+description: Configure Cog to fetch Python packages from private registries
+---
+
+This guide describes how to build a Docker image with Cog that fetches Python packages from a private registry during setup.
+
+## Overview
+
+Cog supports using secret mounts to securely pass private registry credentials to pip during the build process, without baking them into the Docker image.
+
+<Warning>
+Be careful not to commit secrets in Git or include them in Docker images. If your Cog project contains any sensitive files, make sure they're listed in `.gitignore` and `.dockerignore`.
+</Warning>
+
+## Step 1: Create pip.conf
+
+In a directory **outside your Cog project**, create a `pip.conf` file with an `index-url` set to the registry's URL with embedded credentials.
+
+```conf pip.conf
+[global]
+index-url = https://username:password@my-private-registry.com
+```
+
+<Note>
+Store this file outside your project directory to prevent accidentally committing it to version control.
+</Note>
+
+## Step 2: Configure cog.yaml
+
+In your project's `cog.yaml` file, add a setup command to run `pip install` with a secret configuration file mounted to `/etc/pip.conf`.
+
+```yaml cog.yaml
+build:
+  run:
+    - command: pip install
+      mounts:
+        - type: secret
+          id: pip
+          target: /etc/pip.conf
+```
+
+### Configuration Options
+
+<ParamField path="command" type="string" required>
+  The command to run during the build process (e.g., `pip install`).
+</ParamField>
+
+<ParamField path="mounts" type="array" required>
+  An array of mount configurations for the command.
+  
+  <Expandable title="mount properties">
+    <ParamField path="mounts[].type" type="string" required>
+      The type of mount. Must be `secret` for secret mounts.
+    </ParamField>
+    
+    <ParamField path="mounts[].id" type="string" required>
+      A unique identifier for this secret. This must match the `id` you pass to the `--secret` option when building.
+    </ParamField>
+    
+    <ParamField path="mounts[].target" type="string" required>
+      The path where the secret file will be mounted in the container (e.g., `/etc/pip.conf`).
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Step 3: Build with Secret
+
+When building or pushing your model with Cog, pass the `--secret` option with an `id` matching the one specified in `cog.yaml`, along with a path to your local `pip.conf` file.
+
+```bash
+cog build --secret id=pip,source=/path/to/pip.conf
+```
+
+<Note>
+Using a secret mount allows the private registry credentials to be securely passed to the `pip install` setup command, without baking them into the Docker image.
+</Note>
+
+## Caching Behavior
+
+<Warning>
+If you run `cog build` or `cog push` and then change the contents of a secret source file, the cached version of the file will be used on subsequent builds, ignoring any changes you made.
+</Warning>
+
+To update the contents of the target secret file, you have two options:
+
+1. **Change the secret ID**: Update both the `id` value in `cog.yaml` and the `--secret` option
+2. **Bypass the cache**: Pass the `--no-cache` option to `cog build`
+
+```bash
+# Option 1: Change the ID
+cog build --secret id=pip-v2,source=/path/to/pip.conf
+
+# Option 2: Bypass cache
+cog build --secret id=pip,source=/path/to/pip.conf --no-cache
+```
+
+## Additional Resources
+
+For more information on secret mounts, see the [Dockerfile reference](https://docs.docker.com/engine/reference/builder/#run---mounttypesecret) documentation.

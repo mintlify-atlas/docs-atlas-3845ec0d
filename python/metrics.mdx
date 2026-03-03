@@ -1,0 +1,427 @@
+---
+title: "Metrics API"
+description: "Record custom metrics during predictions"
+---
+
+## Overview
+
+Cog allows you to record custom metrics from your `predict()` method to track model-specific data like token counts, timing breakdowns, or confidence scores. Metrics are included in the prediction response alongside the output.
+
+```python
+from cog import BasePredictor
+
+class Predictor(BasePredictor):
+    def predict(self, prompt: str) -> str:
+        self.record_metric("temperature", 0.7)
+        self.record_metric("token_count", 42)
+        result = self.model.generate(prompt)
+        return result
+```
+
+Metrics appear in the prediction response:
+
+```json
+{
+    "status": "succeeded",
+    "output": "...",
+    "metrics": {
+        "temperature": 0.7,
+        "token_count": 42,
+        "predict_time": 1.23
+    }
+}
+```
+
+<Note>
+The `predict_time` metric is automatically added by the Cog runtime. If you set it manually, the runtime value takes precedence.
+</Note>
+
+## Recording Metrics
+
+Use `self.record_metric()` inside your `predict()` method:
+
+```python
+class Predictor(BasePredictor):
+    def predict(self, prompt: str) -> str:
+        # Record simple values
+        self.record_metric("temperature", 0.7)
+        self.record_metric("max_tokens", 100)
+        self.record_metric("model", "gpt-4")
+        
+        result = self.model.generate(prompt)
+        return result
+```
+
+### Method Signature
+
+```python
+def record_metric(self, key: str, value: Any, mode: str = "replace") -> None:
+```
+
+<ParamField path="key" type="str" required>
+  Metric name. Use dot-separated keys for nested objects (e.g., `"timing.inference"`).
+</ParamField>
+
+<ParamField path="value" type="bool | int | float | str | list | dict" required>
+  Metric value. Setting to `None` deletes the metric.
+</ParamField>
+
+<ParamField path="mode" type="str" default="replace">
+  Accumulation mode:
+  - `"replace"` - Overwrite previous value (default)
+  - `"incr"` - Add to existing numeric value
+  - `"append"` - Append to an array
+</ParamField>
+
+## Supported Value Types
+
+Metrics support these value types:
+
+- `bool` - Boolean
+- `int` - Integer
+- `float` - Floating point
+- `str` - String
+- `list` - List of any supported type
+- `dict` - Dictionary with string keys and supported value types
+
+```python
+self.record_metric("enabled", True)  # bool
+self.record_metric("count", 42)  # int
+self.record_metric("confidence", 0.95)  # float
+self.record_metric("model", "gpt-4")  # str
+self.record_metric("steps", ["preprocess", "inference", "postprocess"])  # list
+self.record_metric("config", {"temp": 0.7, "max_tokens": 100})  # dict
+```
+
+## Accumulation Modes
+
+### Replace Mode (Default)
+
+Overwrites any previous value:
+
+```python
+self.record_metric("status", "running")
+self.record_metric("status", "done")
+# Result: {"status": "done"}
+```
+
+### Increment Mode
+
+Adds to existing numeric values:
+
+```python
+self.record_metric("token_count", 10, mode="incr")
+self.record_metric("token_count", 5, mode="incr")
+self.record_metric("token_count", 3, mode="incr")
+# Result: {"token_count": 18}
+```
+
+**Example - Streaming token counter:**
+
+```python
+from cog import BasePredictor, ConcatenateIterator
+
+class Predictor(BasePredictor):
+    def predict(self, prompt: str) -> ConcatenateIterator[str]:
+        for token in self.model.generate_tokens(prompt):
+            self.record_metric("token_count", 1, mode="incr")
+            yield token
+```
+
+### Append Mode
+
+Appends to an array:
+
+```python
+self.record_metric("steps", "preprocessing", mode="append")
+self.record_metric("steps", "inference", mode="append")
+self.record_metric("steps", "postprocessing", mode="append")
+# Result: {"steps": ["preprocessing", "inference", "postprocessing"]}
+```
+
+**Example - Pipeline tracking:**
+
+```python
+class Predictor(BasePredictor):
+    def predict(self, image: Path) -> Path:
+        self.record_metric("pipeline", "loading", mode="append")
+        img = load_image(image)
+        
+        self.record_metric("pipeline", "preprocessing", mode="append")
+        img = preprocess(img)
+        
+        self.record_metric("pipeline", "inference", mode="append")
+        result = self.model(img)
+        
+        self.record_metric("pipeline", "postprocessing", mode="append")
+        output = postprocess(result)
+        
+        return output
+```
+
+## Nested Metrics
+
+Use dot-separated keys to create nested objects:
+
+```python
+self.record_metric("timing.preprocess", 0.12)
+self.record_metric("timing.inference", 0.85)
+self.record_metric("timing.postprocess", 0.05)
+```
+
+Produces:
+
+```json
+{
+    "metrics": {
+        "timing": {
+            "preprocess": 0.12,
+            "inference": 0.85,
+            "postprocess": 0.05
+        },
+        "predict_time": 1.23
+    }
+}
+```
+
+**Example - Detailed timing:**
+
+```python
+import time
+from cog import BasePredictor
+
+class Predictor(BasePredictor):
+    def predict(self, prompt: str) -> str:
+        # Track preprocessing time
+        start = time.time()
+        processed = self.preprocess(prompt)
+        self.record_metric("timing.preprocess", time.time() - start)
+        
+        # Track inference time
+        start = time.time()
+        result = self.model.generate(processed)
+        self.record_metric("timing.inference", time.time() - start)
+        
+        # Track postprocessing time
+        start = time.time()
+        output = self.postprocess(result)
+        self.record_metric("timing.postprocess", time.time() - start)
+        
+        return output
+```
+
+## Type Safety
+
+Once a metric has been assigned a value, its type cannot be changed without deleting it first:
+
+```python
+self.record_metric("count", 1)
+
+# This raises an error - "count" is an int, not a string:
+# self.record_metric("count", "oops")
+
+# Delete first, then set with new type:
+del self.scope.metrics["count"]
+self.record_metric("count", "now a string")
+```
+
+This prevents accidental type mismatches when using accumulation modes.
+
+## Advanced: Scope API
+
+For dict-style access and deletion, use `self.scope`:
+
+```python
+class Predictor(BasePredictor):
+    def predict(self, prompt: str) -> str:
+        # Dict-style access
+        self.scope.metrics["token_count"] = 42
+        
+        # Check if metric exists
+        if "token_count" in self.scope.metrics:
+            print("Token count is set")
+        
+        # Delete a metric
+        del self.scope.metrics["token_count"]
+        
+        # Record with mode (same as record_metric)
+        self.scope.metrics.record("steps", "done", mode="append")
+        
+        return self.model.generate(prompt)
+```
+
+### Scope Reference
+
+```python
+@property
+def scope(self) -> Scope:
+    """Get the current prediction scope"""
+```
+
+The scope object provides:
+
+- `scope.metrics[key]` - Get/set metrics dict-style
+- `scope.metrics.record(key, value, mode)` - Record with mode
+- `del scope.metrics[key]` - Delete a metric
+- `key in scope.metrics` - Check if metric exists
+
+<Note>
+Outside an active prediction, `self.scope` returns a no-op object that silently ignores all operations.
+</Note>
+
+## Module-Level Access
+
+You can also access the current scope from anywhere in your code:
+
+```python
+from cog import current_scope
+
+def helper_function(data):
+    scope = current_scope()
+    scope.record_metric("helper_calls", 1, mode="incr")
+    return process(data)
+
+class Predictor(BasePredictor):
+    def predict(self, prompt: str) -> str:
+        result = helper_function(prompt)
+        return result
+```
+
+### Function Signature
+
+```python
+def current_scope() -> Scope:
+    """Get the current prediction scope for recording metrics."""
+```
+
+Returns a `Scope` object with a `metrics` attribute. Outside a prediction context, returns a no-op scope that silently ignores all operations (never `None`).
+
+## Deleting Metrics
+
+Three ways to delete metrics:
+
+### 1. Set to None
+
+```python
+self.record_metric("temp_metric", "value")
+self.record_metric("temp_metric", None)  # Deleted
+```
+
+### 2. Dict-style deletion
+
+```python
+self.scope.metrics["temp_metric"] = "value"
+del self.scope.metrics["temp_metric"]  # Deleted
+```
+
+### 3. Conditional deletion
+
+```python
+if "temp_metric" in self.scope.metrics:
+    del self.scope.metrics["temp_metric"]
+```
+
+## Examples
+
+### Token Count Tracking
+
+```python
+from cog import BasePredictor, ConcatenateIterator
+
+class Predictor(BasePredictor):
+    def predict(self, prompt: str) -> ConcatenateIterator[str]:
+        self.record_metric("input_tokens", len(self.tokenizer.encode(prompt)))
+        
+        for token in self.model.generate_tokens(prompt):
+            self.record_metric("output_tokens", 1, mode="incr")
+            yield token
+```
+
+### Confidence Scores
+
+```python
+from cog import BaseModel, BasePredictor
+
+class Output(BaseModel):
+    label: str
+    text: str
+
+class Predictor(BasePredictor):
+    def predict(self, text: str) -> Output:
+        result = self.model.classify(text)
+        
+        self.record_metric("confidence", result.confidence)
+        self.record_metric("top_3_labels", result.top_labels[:3])
+        
+        return Output(label=result.label, text=text)
+```
+
+### Multi-Stage Pipeline
+
+```python
+import time
+from cog import BasePredictor, Path
+
+class Predictor(BasePredictor):
+    def predict(self, image: Path) -> Path:
+        stages = ["load", "preprocess", "inference", "postprocess", "save"]
+        
+        for stage in stages:
+            start = time.time()
+            
+            if stage == "load":
+                img = load_image(image)
+            elif stage == "preprocess":
+                img = preprocess(img)
+            elif stage == "inference":
+                result = self.model(img)
+            elif stage == "postprocess":
+                output = postprocess(result)
+            elif stage == "save":
+                output_path = save_image(output)
+            
+            duration = time.time() - start
+            self.record_metric(f"timing.{stage}", duration)
+            self.record_metric("stages", stage, mode="append")
+        
+        return output_path
+```
+
+### Error Rate Tracking
+
+```python
+from cog import BasePredictor
+
+class Predictor(BasePredictor):
+    def predict(self, inputs: list[str]) -> list[str]:
+        results = []
+        
+        for inp in inputs:
+            try:
+                result = self.model.process(inp)
+                results.append(result)
+                self.record_metric("success_count", 1, mode="incr")
+            except Exception as e:
+                results.append(f"Error: {e}")
+                self.record_metric("error_count", 1, mode="incr")
+                self.record_metric("errors", str(e), mode="append")
+        
+        total = len(inputs)
+        success = self.scope.metrics.get("success_count", 0)
+        self.record_metric("success_rate", success / total if total > 0 else 0)
+        
+        return results
+```
+
+## Best Practices
+
+1. **Use descriptive names**: `"token_count"` is better than `"tc"`
+2. **Use dot-paths for grouping**: `"timing.inference"`, `"timing.preprocess"`
+3. **Prefer increment mode for counters**: Use `mode="incr"` for running totals
+4. **Record timing data**: Track performance of different stages
+5. **Don't overuse metrics**: Each metric adds to response size
+6. **Use type-safe patterns**: Don't change metric types mid-prediction
+
+<Note>
+Metrics are only available during predictions. Outside of `predict()`, `self.record_metric()` and `self.scope` are silent no-ops.
+</Note>

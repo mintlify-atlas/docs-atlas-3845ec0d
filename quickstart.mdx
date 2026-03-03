@@ -1,80 +1,183 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get up and running with Cog in 5 minutes
 ---
 
-## Get started in three steps
+This quickstart will walk you through creating a simple image classification model using Cog. You'll learn how to define a model, run predictions, build a Docker image, and serve predictions via HTTP.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Before you begin, make sure you have:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+- **Cog installed** - See the [installation guide](/installation) if you haven't installed Cog yet
+- **Docker running** - Cog uses Docker to create containers for your model
 
-### Step 2: Deploy your changes
+## Create a project
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+First, let's create a new directory for your Cog project:
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+```bash
+mkdir cog-quickstart
+cd cog-quickstart
+```
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+## Define your model
 
-### Step 3: Go live
+<Steps>
+  <Step title="Create cog.yaml">
+    Create a file called `cog.yaml` that defines your model's environment:
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    ```yaml cog.yaml
+    build:
+      python_version: "3.12"
+      python_requirements: requirements.txt
+    predict: "predict.py:Predictor"
+    ```
+
+    <Tip>
+    If you have a machine with an NVIDIA GPU, add `gpu: true` to the `build` section to enable GPU acceleration.
+    </Tip>
+  </Step>
+
+  <Step title="Create requirements.txt">
+    Create a `requirements.txt` file with your Python dependencies:
+
+    ```txt requirements.txt
+    pillow==11.1.0
+    torch==2.6.0
+    torchvision==0.21.0
+    ```
+  </Step>
+
+  <Step title="Create predict.py">
+    Create a `predict.py` file that defines how predictions are run:
+
+    ```python predict.py
+    import os
+    os.environ["TORCH_HOME"] = "."
+
+    import torch
+    from cog import BasePredictor, Input, Path
+    from PIL import Image
+    from torchvision import models
+
+    WEIGHTS = models.ResNet50_Weights.IMAGENET1K_V1
+
+    class Predictor(BasePredictor):
+        def setup(self):
+            """Load the model into memory to make running multiple predictions efficient"""
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            self.model = models.resnet50(weights=WEIGHTS).to(self.device)
+            self.model.eval()
+
+        def predict(self, image: Path = Input(description="Image to classify")) -> dict:
+            """Run a single prediction on the model"""
+            img = Image.open(image).convert("RGB")
+            preds = self.model(WEIGHTS.transforms()(img).unsqueeze(0).to(self.device))
+            top3 = preds[0].softmax(0).topk(3)
+            categories = WEIGHTS.meta["categories"]
+            return {categories[i]: p.detach().item() for p, i in zip(*top3)}
+    ```
+
+    This example creates a ResNet-50 image classifier that:
+    - Loads the model in `setup()` (called once when the container starts)
+    - Takes an image as input via the `predict()` method
+    - Returns the top 3 predicted categories with confidence scores
+  </Step>
+</Steps>
+
+## Run a prediction
+
+Now let's test the model by running a prediction:
+
+```bash
+# Download a test image
+curl https://gist.githubusercontent.com/bfirsh/3c2115692682ae260932a67d93fd94a8/raw/56b19f53f7643bb6c0b822c410c366c3a6244de2/mystery.jpg > input.jpg
+
+# Run a prediction
+cog predict -i image=@input.jpg
+```
+
+<Note>
+The first time you run `cog predict`, it will build a Docker container with all your dependencies. This may take a few minutes. Subsequent predictions will be much faster.
+</Note>
+
+You should see output like this:
+
+```json
+{
+  "tiger_cat": 0.4874822497367859,
+  "tabby": 0.23169134557247162,
+  "Egyptian_cat": 0.09728282690048218
+}
+```
+
+## Build a Docker image
+
+You can build your model into a standalone Docker image that serves predictions via HTTP:
+
+```bash
+cog build -t my-classifier
+```
+
+This creates a Docker image called `my-classifier:latest` that includes:
+- Your model code
+- All dependencies
+- An HTTP server for serving predictions
+
+## Serve predictions via HTTP
+
+Run the Docker image to start an HTTP server:
+
+```bash
+docker run -d -p 5000:5000 my-classifier
+```
+
+Now you can send predictions via HTTP:
+
+```bash
+curl http://localhost:5000/predictions -X POST \
+  -H 'Content-Type: application/json' \
+  -d '{"input": {"image": "https://gist.githubusercontent.com/bfirsh/3c2115692682ae260932a67d93fd94a8/raw/56b19f53f7643bb6c0b822c410c366c3a6244de2/mystery.jpg"}}'
+```
+
+<Tip>
+You can also use `cog serve` to build and serve in one command during development.
+</Tip>
+
+## Push to a registry
+
+To deploy your model, you can push it to a Docker registry. First, add the image name to your `cog.yaml`:
+
+```yaml cog.yaml
+image: "r8.im/your-username/my-classifier"
+build:
+  python_version: "3.12"
+  python_requirements: requirements.txt
+predict: "predict.py:Predictor"
+```
+
+Then push it:
+
+```bash
+cog push
+```
+
+The Docker image is now accessible to anyone with access to the registry and can be deployed to any infrastructure that runs Docker.
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Set up your own model" icon="flask" href="/guides/your-own-model">
+    Learn how to adapt Cog for your own machine learning model
+  </Card>
+  <Card title="Deploy your model" icon="rocket" href="/guides/deploying">
+    Deploy your Cog model to production
+  </Card>
+  <Card title="YAML reference" icon="file-code" href="/config/cog-yaml">
+    Explore all configuration options in cog.yaml
+  </Card>
+  <Card title="Python API" icon="python" href="/python/predictor">
+    Learn about the Predictor interface in detail
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

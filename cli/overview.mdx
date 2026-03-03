@@ -1,0 +1,112 @@
+---
+title: CLI Overview
+description: Complete reference for all Cog command-line tools
+---
+
+Cog is a command-line tool for packaging machine learning models in production-ready containers.
+
+## Quick Reference
+
+| Command | Description |
+|---------|-------------|
+| [cog build](/cli/build) | Build a Docker image from cog.yaml |
+| [cog predict](/cli/predict) | Run a prediction on your model |
+| [cog run](/cli/run) | Run a command inside a Docker environment |
+| [cog serve](/cli/serve) | Start an HTTP prediction server |
+| [cog push](/cli/push) | Build and push an image to a registry |
+| [cog train](/cli/train) | Run a training job |
+
+## Global Flags
+
+These flags are available on all commands:
+
+<ParamField path="--debug" type="boolean">
+  Show debugging output
+</ParamField>
+
+<ParamField path="--help" type="boolean">
+  Show help for any command
+</ParamField>
+
+<ParamField path="--version" type="boolean">
+  Show version of Cog
+</ParamField>
+
+## Installation
+
+Install Cog using Homebrew on macOS:
+
+```bash
+brew install replicate/tap/cog
+```
+
+Or install manually on Linux/macOS:
+
+```bash
+sudo curl -o /usr/local/bin/cog -L "https://github.com/replicate/cog/releases/latest/download/cog_$(uname -s)_$(uname -m)"
+sudo chmod +x /usr/local/bin/cog
+```
+
+## Getting Started
+
+Create a `cog.yaml` file to define your environment:
+
+```yaml
+build:
+  python_version: "3.12"
+  python_requirements: requirements.txt
+predict: "predict.py:Predictor"
+```
+
+Run predictions on your model:
+
+```bash
+cog predict -i prompt="a photo of a cat"
+```
+
+Build a Docker image:
+
+```bash
+cog build -t my-model:latest
+```
+
+## Common Workflows
+
+### Development
+
+1. Create your `cog.yaml` configuration
+2. Use `cog run` to test commands in the environment
+3. Use `cog predict` to test predictions locally
+
+### Testing
+
+```bash
+# Run a Python shell in your environment
+cog run python
+
+# Run a training script
+cog run python train.py
+
+# Test predictions
+cog predict -i image=@input.jpg
+```
+
+### Production
+
+```bash
+# Build an image
+cog build -t my-model:v1
+
+# Push to a registry
+cog push r8.im/username/my-model
+
+# Or combine build and push
+cog push r8.im/username/my-model --separate-weights
+```
+
+## Next Steps
+
+- Learn about [cog build](/cli/build) to create Docker images
+- Learn about [cog predict](/cli/predict) to run predictions
+- Learn about [cog serve](/cli/serve) to start an HTTP server
+- See the [cog.yaml reference](/config/cog-yaml) for configuration options

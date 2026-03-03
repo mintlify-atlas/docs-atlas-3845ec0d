@@ -1,0 +1,400 @@
+---
+title: cog run
+description: Run a command inside a Docker environment
+---
+
+Run a command inside a Docker environment defined by cog.yaml.
+
+Cog builds a temporary image from your cog.yaml configuration and runs the given command inside it. This is useful for debugging, running scripts, or exploring the environment your model will run in.
+
+## Usage
+
+```bash
+cog run <command> [arg...] [flags]
+```
+
+## Flags
+
+<ParamField path="-e, --env" type="string[]">
+  Environment variables in the form `name=value`. Can be specified multiple times.
+  
+  ```bash
+  cog run -e DEBUG=true python script.py
+  ```
+</ParamField>
+
+<ParamField path="-p, --publish" type="string[]">
+  Publish a container's port to the host (e.g., `-p 8000`). Can be specified multiple times.
+  
+  ```bash
+  cog run -p 8888 jupyter notebook
+  ```
+</ParamField>
+
+<ParamField path="-f, --file" type="string" default="cog.yaml">
+  The name of the config file
+  
+  ```bash
+  cog run -f custom-config.yaml python script.py
+  ```
+</ParamField>
+
+<ParamField path="--gpus" type="string">
+  GPU devices to add to the container, in the same format as `docker run --gpus`
+  
+  ```bash
+  cog run --gpus all python train.py
+  ```
+</ParamField>
+
+<ParamField path="--progress" type="string" default="auto">
+  Set type of build progress output: `auto`, `tty`, `plain`, or `quiet`
+</ParamField>
+
+<ParamField path="--use-cog-base-image" type="boolean" default="true">
+  Use pre-built Cog base image for faster cold boots
+</ParamField>
+
+<ParamField path="--use-cuda-base-image" type="string" default="auto">
+  Use Nvidia CUDA base image: `true`, `false`, or `auto`
+</ParamField>
+
+## Examples
+
+### Open a Python interpreter
+
+```bash
+cog run python
+```
+
+Output:
+```
+Building Docker image from environment in cog.yaml...
+
+[+] Building 2.1s (12/12) FINISHED
+
+Running 'python' in Docker with the current directory mounted as a volume...
+
+Python 3.12.0 (main, Oct  2 2023, 15:45:55)
+[GCC 12.2.0] on linux
+Type "help", "copyright", "credits" or "license" for more information.
+>>>
+```
+
+This gives you an interactive Python shell with all your dependencies installed.
+
+### Run a script
+
+```bash
+cog run python train.py
+```
+
+Runs your training script inside the Docker environment with:
+- All dependencies from `cog.yaml` installed
+- Current directory mounted at `/src`
+- GPU access (if configured)
+
+### Run with environment variables
+
+```bash
+cog run -e HUGGING_FACE_HUB_TOKEN=hf_xxx -e MODEL_CACHE=/tmp python download.py
+```
+
+Useful for:
+- Passing API tokens
+- Setting debug flags
+- Configuring cache directories
+
+### Expose a port (Jupyter notebook)
+
+```bash
+cog run -p 8888 jupyter notebook --allow-root --ip=0.0.0.0
+```
+
+Then access Jupyter at `http://localhost:8888`.
+
+Output:
+```
+Building Docker image from environment in cog.yaml...
+
+Running 'jupyter notebook --allow-root --ip=0.0.0.0' in Docker with the current directory mounted as a volume...
+
+[I 2024-01-15 10:30:45.123 ServerApp] Jupyter Server 2.0.0 is running at:
+[I 2024-01-15 10:30:45.123 ServerApp] http://0.0.0.0:8888/lab?token=abc123
+```
+
+### Expose multiple ports
+
+```bash
+cog run -p 8000 -p 8001 python app.py
+```
+
+### Run bash commands
+
+```bash
+cog run bash -c "pip list | grep torch"
+```
+
+Check installed packages:
+```bash
+cog run pip list
+```
+
+Explore the filesystem:
+```bash
+cog run ls -la /root/.cache
+```
+
+### Run with GPU access
+
+```bash
+cog run --gpus all python -c "import torch; print(torch.cuda.is_available())"
+```
+
+Output:
+```
+True
+```
+
+### Run an interactive bash shell
+
+```bash
+cog run bash
+```
+
+Explore your environment interactively:
+```
+root@abc123:/src# python --version
+Python 3.12.0
+root@abc123:/src# pip list
+root@abc123:/src# nvidia-smi
+```
+
+### Run tests
+
+```bash
+cog run pytest tests/
+```
+
+Or with coverage:
+```bash
+cog run pytest --cov=. tests/
+```
+
+### Download model weights
+
+```bash
+cog run python -c "from transformers import AutoModel; AutoModel.from_pretrained('bert-base-uncased')"
+```
+
+### Run data preprocessing
+
+```bash
+cog run python scripts/preprocess_data.py --input data/raw --output data/processed
+```
+
+## Common Use Cases
+
+### Development and debugging
+
+Test your code in the exact environment where it will run:
+
+```bash
+# Start a Python REPL
+cog run python
+
+# Run your code
+cog run python my_script.py
+
+# Debug with ipdb
+cog run python -m ipdb my_script.py
+```
+
+### Interactive exploration
+
+Explore the environment interactively:
+
+```bash
+# Open bash shell
+cog run bash
+
+# Check CUDA version
+cog run nvcc --version
+
+# Check Python packages
+cog run pip list
+```
+
+### Running Jupyter notebooks
+
+Develop in Jupyter with your exact dependencies:
+
+```bash
+cog run -p 8888 jupyter lab --allow-root --ip=0.0.0.0
+```
+
+### Training and experimentation
+
+Run training scripts with environment isolation:
+
+```bash
+cog run -e WANDB_API_KEY=$WANDB_API_KEY python train.py --epochs 100
+```
+
+## How It Works
+
+1. **Build phase**:
+   - Reads your `cog.yaml`
+   - Builds a temporary Docker image
+   - Installs all dependencies
+
+2. **Run phase**:
+   - Starts a Docker container
+   - Mounts current directory at `/src`
+   - Sets working directory to `/src`
+   - Runs your command
+   - Streams output to your terminal
+
+3. **Cleanup**:
+   - Container stops when command exits
+   - Exit code matches your command's exit code
+
+## Volume Mounting
+
+Your current directory is automatically mounted at `/src` in the container:
+
+- **Read access**: Access all your source files
+- **Write access**: Changes persist to your local filesystem
+- **Working directory**: Commands run in `/src` by default
+
+Example:
+```bash
+# Create a file in the container
+cog run bash -c "echo 'test' > output.txt"
+
+# File appears in your current directory
+cat output.txt
+# Output: test
+```
+
+## Environment Variables
+
+### Automatic propagation
+
+Cog automatically propagates:
+- `RUST_LOG` - For debugging the Cog runtime
+
+### Manual environment variables
+
+Pass environment variables with `-e`:
+
+```bash
+cog run -e API_KEY=secret -e DEBUG=1 python script.py
+```
+
+### From cog.yaml
+
+Environment variables can also be set in `cog.yaml`:
+
+```yaml
+build:
+  python_version: "3.12"
+  env:
+    MODEL_CACHE: "/root/.cache/models"
+```
+
+## GPU Access
+
+### Automatic GPU detection
+
+If `cog.yaml` specifies `gpu: true`, Cog automatically:
+- Adds `--gpus all` to the container
+- Uses CUDA base images
+- Installs GPU-enabled packages
+
+### Manual GPU control
+
+```bash
+# Use all GPUs
+cog run --gpus all python train.py
+
+# Use specific GPUs
+cog run --gpus '"device=0,1"' python train.py
+
+# Run without GPU (even if cog.yaml has gpu: true)
+cog run --gpus "" python train.py
+```
+
+### Check GPU availability
+
+```bash
+cog run nvidia-smi
+```
+
+## Port Publishing
+
+Publish ports to access services running in the container:
+
+```bash
+# Jupyter
+cog run -p 8888 jupyter notebook --allow-root --ip=0.0.0.0
+
+# Flask app
+cog run -p 5000 python app.py
+
+# TensorBoard
+cog run -p 6006 tensorboard --logdir runs/ --host 0.0.0.0
+```
+
+The format is `-p <host_port>` where the container port matches the host port.
+
+## Working Directory
+
+Commands run in `/src`, which is mounted to your current directory:
+
+```bash
+cog run pwd
+# Output: /src
+
+cog run ls
+# Lists files from your current directory
+```
+
+## Exit Codes
+
+The exit code matches your command's exit code:
+
+```bash
+cog run python -c "exit(0)"
+echo $?  # Output: 0
+
+cog run python -c "exit(1)"
+echo $?  # Output: 1
+```
+
+## Comparison with Docker
+
+### With cog run:
+```bash
+cog run python script.py
+```
+
+### Equivalent Docker command:
+```bash
+docker build -t temp-image .
+docker run --rm -it \
+  -v $(pwd):/src \
+  -w /src \
+  --gpus all \
+  temp-image \
+  python script.py
+```
+
+Cog handles all the complexity for you!
+
+## See Also
+
+- [cog predict](/cli/predict) - Run predictions on your model
+- [cog serve](/cli/serve) - Start an HTTP server
+- [cog build](/cli/build) - Build a Docker image
+- [cog.yaml reference](/config/cog-yaml) - Configuration file format

@@ -1,0 +1,444 @@
+---
+title: cog train
+description: Run a training job
+---
+
+Run a training job on your model. This command is similar to `cog predict` but specifically for models that support fine-tuning.
+
+<Note>
+  This command is currently in beta. The training interface may change in future versions.
+</Note>
+
+## Usage
+
+```bash
+cog train [image] [flags]
+```
+
+If `image` is provided, it runs the training on that Docker image (must be a Cog-built image with training support). Otherwise, it builds the model in the current directory and runs the training.
+
+## Flags
+
+<ParamField path="-i, --input" type="string[]">
+  Training inputs in the form `name=value`. If value is prefixed with `@`, it's read from a file. Can be specified multiple times.
+  
+  ```bash
+  cog train -i dataset=@training_data.zip -i steps=1000
+  ```
+</ParamField>
+
+<ParamField path="-o, --output" type="string" default="weights">
+  Output path for trained weights
+  
+  ```bash
+  cog train -i dataset=@data.zip -o ./trained_model
+  ```
+</ParamField>
+
+<ParamField path="-e, --env" type="string[]">
+  Environment variables in the form `name=value`. Can be specified multiple times.
+  
+  ```bash
+  cog train -e WANDB_API_KEY=abc123 -i dataset=@data.zip
+  ```
+</ParamField>
+
+<ParamField path="-f, --file" type="string" default="cog.yaml">
+  The name of the config file
+  
+  ```bash
+  cog train -f custom-config.yaml -i dataset=@data.zip
+  ```
+</ParamField>
+
+<ParamField path="--gpus" type="string">
+  GPU devices to add to the container, in the same format as `docker run --gpus`
+  
+  ```bash
+  cog train --gpus all -i dataset=@data.zip
+  ```
+</ParamField>
+
+<ParamField path="--progress" type="string" default="auto">
+  Set type of build progress output: `auto`, `tty`, `plain`, or `quiet`
+</ParamField>
+
+<ParamField path="--use-cog-base-image" type="boolean" default="true">
+  Use pre-built Cog base image for faster cold boots
+</ParamField>
+
+<ParamField path="--use-cuda-base-image" type="string" default="auto">
+  Use Nvidia CUDA base image: `true`, `false`, or `auto`
+</ParamField>
+
+## Training Interface
+
+To support training, your model must implement the `train` method in addition to `predict`.
+
+### Example predictor with training
+
+```python
+from cog import BasePredictor, Input, Path
+import torch
+
+class Predictor(BasePredictor):
+    def setup(self):
+        """Load the model"""
+        self.model = load_model()
+    
+    def predict(
+        self,
+        image: Path = Input(description="Input image")
+    ) -> Path:
+        """Run a prediction"""
+        return self.model(image)
+    
+    def train(
+        self,
+        dataset: Path = Input(description="Training dataset (zip file)"),
+        steps: int = Input(description="Number of training steps", default=1000),
+        learning_rate: float = Input(description="Learning rate", default=1e-4)
+    ) -> Path:
+        """Fine-tune the model"""
+        # Unzip and load training data
+        train_data = load_dataset(dataset)
+        
+        # Configure training
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
+        
+        # Training loop
+        for step in range(steps):
+            loss = train_step(self.model, train_data, optimizer)
+            if step % 100 == 0:
+                print(f"Step {step}: loss = {loss}")
+        
+        # Save trained weights
+        output_path = "/tmp/trained_weights.pth"
+        torch.save(self.model.state_dict(), output_path)
+        
+        return Path(output_path)
+```
+
+### Configuration
+
+Update `cog.yaml` to specify the training interface:
+
+```yaml
+build:
+  gpu: true
+  python_version: "3.12"
+  python_requirements: requirements.txt
+predict: "predict.py:Predictor"
+train: "predict.py:Predictor"  # Can be the same class
+```
+
+## Examples
+
+### Basic training run
+
+```bash
+cog train -i dataset=@training_data.zip -i steps=1000
+```
+
+Output:
+```
+Building Docker image from environment in cog.yaml...
+
+[+] Building 2.3s (12/12) FINISHED
+
+Starting Docker image and running setup()...
+
+Running training...
+
+Step 0: loss = 2.456
+Step 100: loss = 1.234
+Step 200: loss = 0.892
+...
+Step 1000: loss = 0.234
+
+Written output to: weights/trained_weights.pth
+```
+
+### Training with custom output path
+
+```bash
+cog train -i dataset=@data.zip -i steps=2000 -o ./models/v2
+```
+
+Saves the trained weights to `./models/v2/`.
+
+### Training with environment variables
+
+Track training with Weights & Biases:
+
+```bash
+cog train \
+  -e WANDB_API_KEY=$WANDB_API_KEY \
+  -e WANDB_PROJECT=my-project \
+  -i dataset=@data.zip \
+  -i steps=5000
+```
+
+### Training on pre-built image
+
+```bash
+cog train my-model:latest -i dataset=@data.zip -i steps=1000
+```
+
+### Training with multiple inputs
+
+```bash
+cog train \
+  -i train_data=@train.zip \
+  -i val_data=@val.zip \
+  -i epochs=10 \
+  -i batch_size=32 \
+  -i learning_rate=0.001
+```
+
+### Training with GPU control
+
+```bash
+# Use all GPUs
+cog train --gpus all -i dataset=@data.zip
+
+# Use specific GPUs
+cog train --gpus '"device=0,1"' -i dataset=@data.zip
+```
+
+## Input Types
+
+Training inputs work the same as prediction inputs:
+
+### Files
+
+```bash
+cog train -i dataset=@data.zip -i config=@config.json
+```
+
+### Strings
+
+```bash
+cog train -i dataset=@data.zip -i model_name="my-model-v1"
+```
+
+### Numbers
+
+```bash
+cog train -i dataset=@data.zip -i steps=1000 -i learning_rate=0.001
+```
+
+### Booleans
+
+```bash
+cog train -i dataset=@data.zip -i use_augmentation=true
+```
+
+## Output Handling
+
+The `train` method should return a `Path` to the trained weights:
+
+```python
+def train(self, dataset: Path, steps: int = 1000) -> Path:
+    # ... training code ...
+    
+    output_path = "/tmp/weights.pth"
+    torch.save(self.model.state_dict(), output_path)
+    return Path(output_path)
+```
+
+Cog automatically:
+1. Receives the returned path
+2. Copies the file from the container
+3. Saves it to the specified output location
+
+```bash
+cog train -i dataset=@data.zip -o ./my_weights.pth
+```
+
+Output:
+```
+Written output to: ./my_weights.pth
+```
+
+## Training Patterns
+
+### Progress reporting
+
+Use `print()` to show training progress:
+
+```python
+def train(self, dataset: Path, steps: int = 1000) -> Path:
+    for step in range(steps):
+        loss = train_step(...)
+        
+        # Print progress every 100 steps
+        if step % 100 == 0:
+            print(f"Step {step}/{steps}: loss = {loss:.4f}")
+    
+    return Path(output_path)
+```
+
+### Checkpoint saving
+
+Save intermediate checkpoints:
+
+```python
+def train(self, dataset: Path, steps: int = 1000) -> Path:
+    for step in range(steps):
+        loss = train_step(...)
+        
+        # Save checkpoint every 1000 steps
+        if step % 1000 == 0:
+            checkpoint_path = f"/tmp/checkpoint_{step}.pth"
+            torch.save(self.model.state_dict(), checkpoint_path)
+            print(f"Saved checkpoint: {checkpoint_path}")
+    
+    # Return final weights
+    final_path = "/tmp/final_weights.pth"
+    torch.save(self.model.state_dict(), final_path)
+    return Path(final_path)
+```
+
+### Logging and metrics
+
+Integrate with experiment tracking:
+
+```python
+import os
+import wandb
+
+def train(self, dataset: Path, steps: int = 1000) -> Path:
+    # Initialize W&B from environment variables
+    wandb.init(project=os.environ.get("WANDB_PROJECT", "default"))
+    
+    for step in range(steps):
+        loss = train_step(...)
+        
+        # Log metrics
+        wandb.log({"loss": loss, "step": step})
+        print(f"Step {step}: loss = {loss:.4f}")
+    
+    return Path(output_path)
+```
+
+Run with:
+```bash
+cog train -e WANDB_API_KEY=$WANDB_API_KEY -e WANDB_PROJECT=my-project -i dataset=@data.zip
+```
+
+### Validation during training
+
+```python
+def train(
+    self,
+    train_data: Path,
+    val_data: Path,
+    steps: int = 1000
+) -> Path:
+    train_dataset = load_dataset(train_data)
+    val_dataset = load_dataset(val_data)
+    
+    for step in range(steps):
+        # Training step
+        train_loss = train_step(self.model, train_dataset)
+        
+        # Validation every 100 steps
+        if step % 100 == 0:
+            val_loss = validate(self.model, val_dataset)
+            print(f"Step {step}: train_loss={train_loss:.4f}, val_loss={val_loss:.4f}")
+    
+    return Path(output_path)
+```
+
+## GPU Requirements
+
+Training typically requires GPUs. Configure in `cog.yaml`:
+
+```yaml
+build:
+  gpu: true
+  cuda: "12.1"
+  python_version: "3.12"
+  python_requirements: requirements.txt
+train: "predict.py:Predictor"
+```
+
+Cog automatically:
+- Uses CUDA base images
+- Installs GPU-enabled packages
+- Passes `--gpus all` to the container
+
+## Error Handling
+
+### Training failures
+
+When training fails, Cog exits with a non-zero status:
+
+```bash
+cog train -i dataset=@data.zip
+# Exit code: 1
+```
+
+### Out of memory
+
+```
+RuntimeError: CUDA out of memory
+```
+
+Solutions:
+- Reduce batch size
+- Use gradient accumulation
+- Use a smaller model
+- Use more GPUs
+
+### Invalid dataset
+
+```
+Error: Failed to load dataset from data.zip
+```
+
+Validate your dataset format matches what your training code expects.
+
+## How It Works
+
+1. **Build phase** (if no image specified):
+   - Reads `cog.yaml`
+   - Builds Docker image with training dependencies
+   - Mounts current directory as a volume
+
+2. **Setup phase**:
+   - Starts Docker container with GPU access
+   - Runs your model's `setup()` method
+   - Loads model weights
+
+3. **Training phase**:
+   - Validates training inputs
+   - Runs your model's `train()` method
+   - Streams logs to terminal
+
+4. **Output phase**:
+   - Receives trained weights path
+   - Copies weights from container
+   - Saves to specified output location
+
+5. **Cleanup**:
+   - Stops container
+   - Removes temporary resources
+
+## Comparison with Predict
+
+| Feature | `cog predict` | `cog train` |
+|---------|--------------|-------------|
+| Method called | `predict()` | `train()` |
+| Default output | `output` | `weights` |
+| Typical duration | Seconds to minutes | Minutes to hours |
+| GPU usage | Optional | Usually required |
+| Return type | Any | Usually `Path` |
+
+## See Also
+
+- [cog predict](/cli/predict) - Run predictions
+- [Training interface reference](/python/trainer) - Training API documentation
+- [Python API reference](/python/predictor) - Define your training interface
+- [cog.yaml reference](/config/cog-yaml) - Configuration options

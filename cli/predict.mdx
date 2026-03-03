@@ -1,0 +1,366 @@
+---
+title: cog predict
+description: Run a prediction on your model
+---
+
+Run a prediction on a model. Can build and run from the current directory, or run against a pre-built Docker image.
+
+## Usage
+
+```bash
+cog predict [image] [flags]
+```
+
+If `image` is provided, it runs the prediction on that Docker image (must be a Cog-built image). Otherwise, it builds the model in the current directory and runs the prediction.
+
+## Flags
+
+<ParamField path="-i, --input" type="string[]">
+  Inputs in the form `name=value`. If value is prefixed with `@`, it's read from a file. Can be specified multiple times.
+  
+  ```bash
+  cog predict -i prompt="a photo of a cat"
+  cog predict -i image=@photo.jpg
+  cog predict -i prompt="sunset" -i width=1024 -i height=768
+  ```
+</ParamField>
+
+<ParamField path="--json" type="string">
+  Pass inputs as a JSON object, read from a file (`@inputs.json`) or via stdin (`@-`)
+  
+  ```bash
+  echo '{"prompt": "a cat"}' | cog predict --json @-
+  cog predict --json @inputs.json
+  ```
+</ParamField>
+
+<ParamField path="-o, --output" type="string">
+  Output path for saving results
+  
+  ```bash
+  cog predict -i image=@input.jpg -o output.png
+  ```
+</ParamField>
+
+<ParamField path="-e, --env" type="string[]">
+  Environment variables in the form `name=value`. Can be specified multiple times.
+  
+  ```bash
+  cog predict -e DEBUG=true -i prompt="test"
+  ```
+</ParamField>
+
+<ParamField path="-f, --file" type="string" default="cog.yaml">
+  The name of the config file
+  
+  ```bash
+  cog predict -f custom-config.yaml -i image=@input.jpg
+  ```
+</ParamField>
+
+<ParamField path="--gpus" type="string">
+  GPU devices to add to the container, in the same format as `docker run --gpus`
+  
+  ```bash
+  cog predict --gpus all -i prompt="test"
+  cog predict --gpus '"device=0,1"' -i prompt="test"
+  ```
+</ParamField>
+
+<ParamField path="--setup-timeout" type="integer" default="300">
+  The timeout for container setup in seconds
+  
+  ```bash
+  cog predict --setup-timeout 600 -i image=@input.jpg
+  ```
+</ParamField>
+
+<ParamField path="--use-replicate-token" type="boolean">
+  Pass `REPLICATE_API_TOKEN` from local environment into the model context
+  
+  ```bash
+  cog predict --use-replicate-token -i prompt="test"
+  ```
+</ParamField>
+
+<ParamField path="--progress" type="string" default="auto">
+  Set type of build progress output: `auto`, `tty`, `plain`, or `quiet`
+</ParamField>
+
+<ParamField path="--use-cog-base-image" type="boolean" default="true">
+  Use pre-built Cog base image for faster cold boots
+</ParamField>
+
+<ParamField path="--use-cuda-base-image" type="string" default="auto">
+  Use Nvidia CUDA base image: `true`, `false`, or `auto`
+</ParamField>
+
+## Examples
+
+### Run a prediction with named inputs
+
+```bash
+cog predict -i prompt="a photo of a cat"
+```
+
+Output:
+```
+Building Docker image from environment in cog.yaml...
+
+[+] Building 2.3s (12/12) FINISHED
+
+Starting Docker image and running setup()...
+
+Running prediction...
+
+"A curious tabby cat sitting on a windowsill, photographed in natural light"
+```
+
+### Pass a file as input
+
+```bash
+cog predict -i image=@photo.jpg
+```
+
+The `@` prefix tells Cog to read the file contents:
+
+```
+Running prediction...
+
+{
+  "label": "tabby_cat",
+  "confidence": 0.94
+}
+```
+
+### Save output to a file
+
+```bash
+cog predict -i image=@input.jpg -o output.png
+```
+
+Output:
+```
+Running prediction...
+
+Written output to: output.png
+```
+
+### Pass multiple inputs
+
+```bash
+cog predict -i prompt="sunset over mountains" -i width=1024 -i height=768 -i num_outputs=4
+```
+
+### Run against a pre-built image
+
+Instead of building from the current directory:
+
+```bash
+cog predict r8.im/username/my-model -i prompt="hello"
+```
+
+Or with a local image:
+
+```bash
+cog predict my-model:latest -i prompt="hello"
+```
+
+### Pass inputs as JSON
+
+From stdin:
+
+```bash
+echo '{"prompt": "a cat", "num_outputs": 4}' | cog predict --json @-
+```
+
+From a file:
+
+```bash
+cog predict --json @inputs.json
+```
+
+Where `inputs.json` contains:
+
+```json
+{
+  "prompt": "a photo of a cat",
+  "width": 1024,
+  "height": 768
+}
+```
+
+### Pass files in JSON mode
+
+In JSON mode, prefix file paths with `@`:
+
+```json
+{
+  "image": "@photo.jpg",
+  "mask": "@mask.png"
+}
+```
+
+### Run with environment variables
+
+```bash
+cog predict -e DEBUG=true -e MODEL_CACHE=/tmp/cache -i prompt="test"
+```
+
+### Specify GPU usage
+
+```bash
+# Use all available GPUs
+cog predict --gpus all -i prompt="test"
+
+# Use specific GPUs
+cog predict --gpus '"device=0,1"' -i prompt="test"
+
+# Run without GPU
+cog predict --gpus "" -i prompt="test"
+```
+
+### Handle large models with longer setup timeout
+
+```bash
+cog predict --setup-timeout 600 -i image=@input.jpg
+```
+
+## Input Types
+
+Cog automatically handles different input types:
+
+### Files
+
+Prefix with `@` to read from disk:
+
+```bash
+cog predict -i image=@photo.jpg -i audio=@sound.wav
+```
+
+### Strings
+
+```bash
+cog predict -i prompt="hello world" -i text="some text"
+```
+
+### Numbers
+
+```bash
+cog predict -i width=1024 -i temperature=0.8
+```
+
+### Booleans
+
+```bash
+cog predict -i use_refiner=true -i debug=false
+```
+
+## Output Handling
+
+### String outputs
+
+Printed directly to stdout:
+
+```
+"Generated text output"
+```
+
+### File outputs
+
+Automatically saved to disk:
+
+```
+Written output to: output.0.png
+Written output to: output.1.png
+```
+
+### JSON outputs
+
+Pretty-printed:
+
+```json
+{
+  "result": "success",
+  "score": 0.95
+}
+```
+
+### Array outputs
+
+For file arrays, each file is numbered:
+
+```bash
+cog predict -i prompt="cats" -o result.png
+```
+
+Produces:
+```
+Written output to: result.0.png
+Written output to: result.1.png
+Written output to: result.2.png
+```
+
+## Error Handling
+
+### Prediction failures
+
+When a prediction fails, Cog exits with a non-zero status code:
+
+```bash
+cog predict -i invalid=input
+# Exit code: 1
+```
+
+### Missing inputs
+
+Cog validates inputs against your model's schema:
+
+```
+Error: Missing required input 'prompt'
+```
+
+### Invalid image name
+
+If you forget `-i`, Cog detects the mistake:
+
+```bash
+cog predict image=@photo.jpg
+# Error: Invalid image name 'image=@photo.jpg'. Did you forget `-i`?
+```
+
+## GPU Support
+
+Cog automatically detects when your model needs a GPU:
+
+- If `cog.yaml` specifies `gpu: true`, Cog uses `--gpus all` by default
+- If GPU drivers are missing, Cog automatically retries without GPU
+- You can override with `--gpus` flag
+
+## How It Works
+
+1. **Build phase** (if no image specified):
+   - Reads `cog.yaml`
+   - Builds a Docker image with your environment
+   - Mounts current directory as a volume
+
+2. **Setup phase**:
+   - Starts Docker container
+   - Runs your model's `setup()` method
+   - Waits up to `--setup-timeout` seconds
+
+3. **Prediction phase**:
+   - Validates inputs against model schema
+   - Runs your model's `predict()` method
+   - Handles output based on type
+
+4. **Cleanup**:
+   - Stops the container
+   - Removes temporary resources
+
+## See Also
+
+- [cog build](/cli/build) - Build a Docker image
+- [cog serve](/cli/serve) - Run an HTTP prediction server
+- [cog train](/cli/train) - Run training jobs
+- [Python API reference](/python/predictor) - Define your prediction interface

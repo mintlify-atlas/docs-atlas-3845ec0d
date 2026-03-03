@@ -1,0 +1,131 @@
+---
+title: Using Jupyter Notebooks
+description: Integrate Jupyter notebooks with Cog for interactive development
+---
+
+Cog plays nicely with Jupyter notebooks, allowing you to develop and test your models interactively in the same environment defined by your `cog.yaml`.
+
+## Setup
+
+<Steps>
+  <Step title="Add jupyterlab to your dependencies">
+    First, add `jupyterlab` to your `requirements.txt` file:
+
+    ```txt
+    jupyterlab==3.3.4
+    ```
+  </Step>
+
+  <Step title="Configure cog.yaml">
+    Reference the requirements file in your `cog.yaml`:
+
+    ```yaml
+    build:
+      python_requirements: requirements.txt
+    ```
+
+    <Note>
+      You can specify any version of jupyterlab compatible with your Python version. The example uses version 3.3.4.
+    </Note>
+  </Step>
+</Steps>
+
+## Running Jupyter Lab
+
+Cog can run notebooks in the environment you've defined in `cog.yaml` with the following command:
+
+```bash
+cog run -p 8888 jupyter lab --allow-root --ip=0.0.0.0
+```
+
+Breakdown of the command:
+- `cog run` - Runs the command in your Cog environment
+- `-p 8888` - Exposes port 8888 for the Jupyter server
+- `--allow-root` - Allows Jupyter to run as root (required in Docker)
+- `--ip=0.0.0.0` - Makes Jupyter accessible from outside the container
+
+<Tip>
+  Once Jupyter Lab starts, it will display a URL with a token. Copy and paste this URL into your browser to access the notebook interface.
+</Tip>
+
+## Using Notebook Code in Your Predictor
+
+You can import code from a notebook into your Cog predictor, enabling you to develop interactively and then productionize your work.
+
+<Steps>
+  <Step title="Export your notebook to Python">
+    Convert your notebook to a Python script:
+
+    ```bash
+    jupyter nbconvert --to script my_notebook.ipynb
+    ```
+
+    This creates a file called `my_notebook.py` containing all the code from your notebook.
+  </Step>
+
+  <Step title="Import the notebook in your predictor">
+    Import the exported Python script into your `predict.py` file:
+
+    ```python
+    from cog import BasePredictor, Input
+
+    import my_notebook
+
+    class Predictor(BasePredictor):
+        def predict(self, prompt: str = Input(description="string prompt")) -> str:
+            output = my_notebook.do_stuff(prompt)
+            return output
+    ```
+
+    <Note>
+      Any functions or variables defined in your notebook will be available to your predictor through the imported module.
+    </Note>
+  </Step>
+</Steps>
+
+## Development Workflow
+
+Here's a recommended workflow for developing models with notebooks:
+
+1. **Start Jupyter Lab** with `cog run -p 8888 jupyter lab --allow-root --ip=0.0.0.0`
+2. **Develop your model** interactively in a notebook
+3. **Test your model** with sample data in the notebook
+4. **Export the notebook** to Python using `jupyter nbconvert`
+5. **Import into predictor** and define the prediction interface
+6. **Test with Cog** using `cog predict`
+
+<Warning>
+  When exporting notebooks, be aware that cell execution order matters. Make sure to run all cells from top to bottom before exporting to ensure the exported Python file works correctly.
+</Warning>
+
+## Best Practices
+
+### Keep notebooks focused
+
+Create separate notebooks for different stages of development:
+- Data exploration
+- Model training
+- Inference testing
+
+### Clean up before exporting
+
+Before exporting a notebook:
+- Remove exploratory code and debug statements
+- Ensure all imports are at the top
+- Test that cells run in order from top to bottom
+
+### Version control
+
+Consider adding both `.ipynb` and `.py` versions to version control:
+- Notebooks for interactive development
+- Python files for production code
+
+<Tip>
+  You can use tools like `nbstripout` to remove output from notebooks before committing them to version control, keeping diffs clean.
+</Tip>
+
+## Next Steps
+
+- Learn about [setting up your own model](/guides/your-own-model)
+- Explore the [Python API reference](/python/predictor)
+- See the [cog.yaml reference](/config/cog-yaml) for more configuration options

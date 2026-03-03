@@ -1,0 +1,256 @@
+---
+title: Prediction Endpoints
+description: Create and manage predictions using the HTTP API
+---
+
+## POST /predictions
+
+Makes a single prediction.
+
+### Request
+
+```bash
+curl http://localhost:5001/predictions -X POST \
+    --header "Content-Type: application/json" \
+    --data '{
+      "input": {
+        "image": "https://example.com/image.jpg",
+        "text": "Hello world!"
+      }
+    }'
+```
+
+<ParamField body="input" type="object" required>
+A JSON object with the same keys as the arguments to the `predict()` function. Any `File` or `Path` inputs are passed as URLs.
+</ParamField>
+
+<ParamField body="webhook" type="string">
+URL to receive webhook notifications about prediction status updates. See [Webhooks](/http/webhooks) for details.
+</ParamField>
+
+<ParamField body="webhook_events_filter" type="array">
+Array of event types to trigger webhook notifications. Valid values: `start`, `output`, `logs`, `completed`. Defaults to all events if not specified.
+</ParamField>
+
+<ParamField body="output_file_prefix" type="string">
+Base URL to upload output files to instead of returning them as base64-encoded data URLs. See [File Uploads](/http/file-uploads) for details.
+</ParamField>
+
+### Response (200 OK)
+
+Synchronous prediction completed successfully.
+
+```json
+{
+    "status": "succeeded",
+    "output": "data:image/png;base64,...",
+    "metrics": {
+        "predict_time": 4.52
+    }
+}
+```
+
+<ResponseField name="status" type="string" required>
+Either `succeeded` or `failed`.
+</ResponseField>
+
+<ResponseField name="output" type="any">
+The return value of the `predict()` function. Type depends on your model's output schema.
+</ResponseField>
+
+<ResponseField name="error" type="string">
+If `status` is `failed`, contains the error message.
+</ResponseField>
+
+<ResponseField name="metrics" type="object">
+An object containing prediction metrics.
+
+<Expandable title="metrics properties">
+<ResponseField name="predict_time" type="number" required>
+Elapsed time in seconds for the prediction.
+</ResponseField>
+
+<ResponseField name="custom_metric" type="number">
+Custom metrics recorded by the model using `self.record_metric()`.
+</ResponseField>
+</Expandable>
+</ResponseField>
+
+### Response (202 Accepted)
+
+Asynchronous prediction started (when `Prefer: respond-async` header is set).
+
+```bash
+curl http://localhost:5001/predictions -X POST \
+    --header "Content-Type: application/json" \
+    --header "Prefer: respond-async" \
+    --data '{
+      "input": {"prompt": "A picture of an onion with sunglasses"}
+    }'
+```
+
+```json
+{
+    "status": "starting"
+}
+```
+
+<ResponseField name="status" type="string" required>
+Prediction status. Value will be `starting` when the prediction is first created.
+</ResponseField>
+
+## PUT /predictions/\<prediction_id>
+
+Makes a single prediction. This is the idempotent version of the `POST /predictions` endpoint.
+
+If a client calls this endpoint more than once with the same ID (for example, due to a network interruption) while the prediction is still running, no new prediction is created. Instead, the client receives a `202 Accepted` response with the initial state of the prediction.
+
+### Generating Prediction IDs
+
+Clients are responsible for providing unique prediction IDs. We recommend generating a UUIDv4 or [UUIDv7](https://uuid7.com), base32-encoding that value, and removing padding characters (`==`). This produces a random identifier that is 26 ASCII characters long.
+
+```python
+from uuid import uuid4
+from base64 import b32encode
+
+id = b32encode(uuid4().bytes).decode('utf-8').lower().rstrip('=')
+print(id)  # 'wjx3whax6rf4vphkegkhcvpv6a'
+```
+
+<Warning>
+The server can run only one prediction at a time. The client must ensure that the running prediction is complete before creating a new one with a different ID.
+</Warning>
+
+### Request
+
+```bash
+curl http://localhost:5001/predictions/wjx3whax6rf4vphkegkhcvpv6a -X PUT \
+    --header "Content-Type: application/json" \
+    --data '{
+      "input": {"prompt": "A picture of an onion with sunglasses"}
+    }'
+```
+
+<ParamField path="prediction_id" type="string" required>
+Unique identifier for the prediction. Must be provided by the client.
+</ParamField>
+
+<ParamField body="input" type="object" required>
+A JSON object with the same keys as the arguments to the `predict()` function. Any `File` or `Path` inputs are passed as URLs.
+</ParamField>
+
+<ParamField body="webhook" type="string">
+URL to receive webhook notifications about prediction status updates. See [Webhooks](/http/webhooks) for details.
+</ParamField>
+
+<ParamField body="webhook_events_filter" type="array">
+Array of event types to trigger webhook notifications. Valid values: `start`, `output`, `logs`, `completed`. Defaults to all events if not specified.
+</ParamField>
+
+<ParamField body="output_file_prefix" type="string">
+Base URL to upload output files to instead of returning them as base64-encoded data URLs. See [File Uploads](/http/file-uploads) for details.
+</ParamField>
+
+### Response (200 OK)
+
+Synchronous prediction completed successfully.
+
+```json
+{
+    "status": "succeeded",
+    "output": "data:image/png;base64,..."
+}
+```
+
+<ResponseField name="status" type="string" required>
+Either `succeeded` or `failed`.
+</ResponseField>
+
+<ResponseField name="output" type="any">
+The return value of the `predict()` function. Type depends on your model's output schema.
+</ResponseField>
+
+<ResponseField name="error" type="string">
+If `status` is `failed`, contains the error message.
+</ResponseField>
+
+### Response (202 Accepted)
+
+Asynchronous prediction started (when `Prefer: respond-async` header is set).
+
+```bash
+curl http://localhost:5001/predictions/wjx3whax6rf4vphkegkhcvpv6a -X PUT \
+    --header "Content-Type: application/json" \
+    --header "Prefer: respond-async" \
+    --data '{
+      "input": {"prompt": "A picture of an onion with sunglasses"}
+    }'
+```
+
+```json
+{
+    "id": "wjx3whax6rf4vphkegkhcvpv6a",
+    "status": "starting"
+}
+```
+
+<ResponseField name="id" type="string" required>
+The prediction ID provided in the request.
+</ResponseField>
+
+<ResponseField name="status" type="string" required>
+Prediction status. Value will be `starting` when the prediction is first created.
+</ResponseField>
+
+## POST /predictions/\<prediction_id>/cancel
+
+Cancels an asynchronous prediction.
+
+A client can cancel an asynchronous prediction by making a `POST /predictions/<prediction_id>/cancel` request using the prediction `id` provided when the prediction was created.
+
+<Warning>
+A prediction cannot be canceled if it's created synchronously (without the `Prefer: respond-async` header), or created without a provided `id`.
+</Warning>
+
+### Request
+
+```bash
+# First, create an async prediction with an ID
+curl http://localhost:5001/predictions -X POST \
+    --header "Content-Type: application/json" \
+    --header "Prefer: respond-async" \
+    --data '{
+      "id": "abcd1234",
+      "input": {"prompt": "A picture of an onion with sunglasses"}
+    }'
+
+# Then cancel it
+curl http://localhost:5001/predictions/abcd1234/cancel -X POST
+```
+
+<ParamField path="prediction_id" type="string" required>
+The ID of the prediction to cancel.
+</ParamField>
+
+### Response
+
+**200 OK** - If a prediction exists with the provided `id`.
+
+**404 Not Found** - If no prediction exists with the provided `id`.
+
+### Handling Cancellation in Your Model
+
+When a prediction is canceled, Cog raises `CancelationException` in sync predictors (or `asyncio.CancelledError` in async predictors). This exception may be caught by the model to perform necessary cleanup.
+
+The cleanup should be brief, ideally completing within a few seconds. After cleanup, the exception must be re-raised using a bare `raise` statement. Failure to re-raise the exception may result in the termination of the container.
+
+```python
+from cog import CancelationException, Path
+
+def predict(image: Path) -> Path:
+    try:
+        return process(image)
+    except CancelationException:
+        cleanup()
+        raise  # always re-raise
+```

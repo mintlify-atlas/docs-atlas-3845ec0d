@@ -1,0 +1,198 @@
+---
+title: cog build
+description: Build a Docker image from cog.yaml
+---
+
+Build a Docker image from the cog.yaml in the current directory.
+
+The generated image contains your model code, dependencies, and the Cog runtime. It can be run locally with `cog predict` or pushed to a registry with `cog push`.
+
+## Usage
+
+```bash
+cog build [flags]
+```
+
+## Flags
+
+<ParamField path="-t, --tag" type="string">
+  A name for the built image in the form `repository:tag`
+  
+  ```bash
+  cog build -t my-model:latest
+  ```
+</ParamField>
+
+<ParamField path="-f, --file" type="string" default="cog.yaml">
+  The name of the config file
+  
+  ```bash
+  cog build -f custom-config.yaml
+  ```
+</ParamField>
+
+<ParamField path="--no-cache" type="boolean">
+  Do not use cache when building the image
+  
+  ```bash
+  cog build --no-cache
+  ```
+</ParamField>
+
+<ParamField path="--separate-weights" type="boolean">
+  Separate model weights from code in image layers. This creates a more efficient image structure where weights are in a separate layer that can be cached independently.
+  
+  ```bash
+  cog build --separate-weights -t my-model:v1
+  ```
+</ParamField>
+
+<ParamField path="--progress" type="string" default="auto">
+  Set type of build progress output: `auto`, `tty`, `plain`, or `quiet`
+  
+  ```bash
+  cog build --progress=plain
+  ```
+</ParamField>
+
+<ParamField path="--secret" type="string[]">
+  Secrets to pass to the build environment in the form `id=foo,src=/path/to/file`. Can be specified multiple times.
+  
+  ```bash
+  cog build --secret id=mysecret,src=./secret.txt
+  ```
+</ParamField>
+
+<ParamField path="--openapi-schema" type="string">
+  Load OpenAPI schema from a file instead of generating it
+  
+  ```bash
+  cog build --openapi-schema schema.json
+  ```
+</ParamField>
+
+<ParamField path="--use-cog-base-image" type="boolean" default="true">
+  Use pre-built Cog base image for faster cold boots
+  
+  ```bash
+  cog build --use-cog-base-image=false
+  ```
+</ParamField>
+
+<ParamField path="--use-cuda-base-image" type="string" default="auto">
+  Use Nvidia CUDA base image: `true`, `false`, or `auto`. Setting to `false` uses a Python base image, resulting in a smaller image but may cause problems for non-torch projects.
+  
+  ```bash
+  cog build --use-cuda-base-image=true
+  ```
+</ParamField>
+
+## Examples
+
+### Build with default settings
+
+```bash
+cog build
+```
+
+Output:
+```
+Building Docker image from environment in cog.yaml as cog-my-model...
+
+[+] Building 45.2s (15/15) FINISHED
+ => [internal] load build definition from Dockerfile
+ => transferring dockerfile: 2.34kB
+ => [internal] load .dockerignore
+ => transferring context: 2B
+ => [internal] load metadata for docker.io/library/python:3.12
+...
+
+Image built as cog-my-model
+```
+
+### Build and tag the image
+
+```bash
+cog build -t my-model:latest
+```
+
+This creates an image named `my-model:latest` that you can run with Docker:
+
+```bash
+docker run -d -p 5000:5000 my-model:latest
+```
+
+### Build without using cache
+
+Useful when you want to ensure a fresh build:
+
+```bash
+cog build --no-cache
+```
+
+### Build with model weights in a separate layer
+
+This optimization is especially useful for large models:
+
+```bash
+cog build --separate-weights -t my-model:v1
+```
+
+The separate weights layer allows for:
+- Faster rebuilds when only code changes
+- More efficient image storage
+- Better layer caching
+
+### Build with secrets
+
+Pass secrets to the build process (useful for private package registries):
+
+```bash
+cog build --secret id=pip_config,src=~/.pip/pip.conf
+```
+
+### Build with custom progress output
+
+```bash
+# Plain text output (good for CI/CD)
+cog build --progress=plain
+
+# Quiet mode
+cog build --progress=quiet
+
+# TTY mode (interactive)
+cog build --progress=tty
+```
+
+## How It Works
+
+When you run `cog build`, Cog:
+
+1. Reads your `cog.yaml` configuration
+2. Generates an optimized Dockerfile with:
+   - The correct base image (CUDA-enabled if needed)
+   - System package installations
+   - Python environment setup
+   - Your application code
+3. Builds the Docker image using BuildKit
+4. Tags the image with the specified name
+
+## Environment Variables
+
+The build process respects these environment variables:
+
+- `BUILDKIT_PROGRESS` - Sets default progress output type
+- `DOCKER_BUILDKIT` - Enables BuildKit (recommended)
+
+## Notes
+
+- The first build may take several minutes as it downloads base images and installs dependencies
+- Subsequent builds are faster due to Docker layer caching
+- Built images include the Cog HTTP server for serving predictions
+- Images can be run locally or pushed to any Docker registry
+
+## See Also
+
+- [cog push](/cli/push) - Build and push to a registry in one command
+- [cog predict](/cli/predict) - Run predictions on a built image
+- [cog.yaml reference](/config/cog-yaml) - Configuration file format

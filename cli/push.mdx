@@ -1,0 +1,470 @@
+---
+title: cog push
+description: Build and push a Docker image to a registry
+---
+
+Build a Docker image from cog.yaml and push it to a container registry.
+
+Cog can push to any OCI-compliant registry. When pushing to Replicate's registry (r8.im), run `cog login` first to authenticate.
+
+## Usage
+
+```bash
+cog push [IMAGE] [flags]
+```
+
+The `IMAGE` argument specifies the destination in the format `registry.example.com/username/model-name`. If not provided, Cog uses the `image` field from `cog.yaml`.
+
+## Flags
+
+<ParamField path="-f, --file" type="string" default="cog.yaml">
+  The name of the config file
+  
+  ```bash
+  cog push -f custom-config.yaml
+  ```
+</ParamField>
+
+<ParamField path="--no-cache" type="boolean">
+  Do not use cache when building the image
+  
+  ```bash
+  cog push r8.im/username/model --no-cache
+  ```
+</ParamField>
+
+<ParamField path="--separate-weights" type="boolean">
+  Separate model weights from code in image layers. This is a Replicate-specific optimization that enables faster deploys when only code changes.
+  
+  ```bash
+  cog push r8.im/username/model --separate-weights
+  ```
+</ParamField>
+
+<ParamField path="--progress" type="string" default="auto">
+  Set type of build progress output: `auto`, `tty`, `plain`, or `quiet`
+  
+  ```bash
+  cog push r8.im/username/model --progress=plain
+  ```
+</ParamField>
+
+<ParamField path="--secret" type="string[]">
+  Secrets to pass to the build environment in the form `id=foo,src=/path/to/file`. Can be specified multiple times.
+  
+  ```bash
+  cog push r8.im/username/model --secret id=pip_config,src=~/.pip/pip.conf
+  ```
+</ParamField>
+
+<ParamField path="--openapi-schema" type="string">
+  Load OpenAPI schema from a file instead of generating it
+  
+  ```bash
+  cog push r8.im/username/model --openapi-schema schema.json
+  ```
+</ParamField>
+
+<ParamField path="--use-cog-base-image" type="boolean" default="true">
+  Use pre-built Cog base image for faster cold boots
+</ParamField>
+
+<ParamField path="--use-cuda-base-image" type="string" default="auto">
+  Use Nvidia CUDA base image: `true`, `false`, or `auto`
+</ParamField>
+
+## Examples
+
+### Push to Replicate
+
+```bash
+cog push r8.im/your-username/my-model
+```
+
+Output:
+```
+Building Docker image from environment in cog.yaml as r8.im/your-username/my-model...
+
+[+] Building 45.2s (15/15) FINISHED
+ => [internal] load build definition from Dockerfile
+ => transferring dockerfile: 2.34kB
+...
+
+Pushing image r8.im/your-username/my-model...
+ab12cd34: Pushing [==========================>] 2.048 MB/2.048 MB
+ef56gh78: Pushing [===================>       ] 1.5 MB/2.0 MB
+...
+
+Pushed r8.im/your-username/my-model
+https://replicate.com/your-username/my-model
+```
+
+### Push to any OCI registry
+
+```bash
+cog push registry.example.com/your-username/model-name
+```
+
+Works with:
+- Docker Hub: `docker.io/username/model`
+- GitHub Container Registry: `ghcr.io/username/model`
+- AWS ECR: `123456789.dkr.ecr.us-east-1.amazonaws.com/model`
+- Google Artifact Registry: `us-docker.pkg.dev/project/repo/model`
+- Azure Container Registry: `myregistry.azurecr.io/model`
+
+### Push with separate weights
+
+Optimizes image layers for faster updates (Replicate only):
+
+```bash
+cog push r8.im/your-username/my-model --separate-weights
+```
+
+Benefits:
+- Faster deploys when only code changes
+- More efficient storage
+- Better layer caching
+
+### Push from cog.yaml
+
+Add the image name to `cog.yaml`:
+
+```yaml
+image: "r8.im/your-username/my-model"
+build:
+  python_version: "3.12"
+  python_requirements: requirements.txt
+predict: "predict.py:Predictor"
+```
+
+Then simply run:
+
+```bash
+cog push
+```
+
+### Push with no cache
+
+Force a fresh build:
+
+```bash
+cog push r8.im/username/model --no-cache
+```
+
+Useful when:
+- Dependencies have changed
+- You need to clear cached layers
+- Debugging build issues
+
+### Push with secrets
+
+Pass secrets for private registries or packages:
+
+```bash
+cog push r8.im/username/model \
+  --secret id=pip_config,src=~/.pip/pip.conf \
+  --secret id=github_token,src=./github_token.txt
+```
+
+## Authentication
+
+### Replicate (r8.im)
+
+Authenticate with Replicate:
+
+```bash
+cog login
+```
+
+This opens your browser to get a token. Alternatively, use a token directly:
+
+```bash
+cog login --token-stdin < token.txt
+```
+
+### Other registries
+
+Use Docker's authentication:
+
+```bash
+# Docker Hub
+docker login
+
+# Other registries
+docker login registry.example.com
+```
+
+Cog uses your Docker credentials automatically.
+
+### GitHub Container Registry
+
+```bash
+echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+cog push ghcr.io/username/model
+```
+
+### AWS ECR
+
+```bash
+aws ecr get-login-password --region us-east-1 | \
+  docker login --username AWS --password-stdin \
+  123456789.dkr.ecr.us-east-1.amazonaws.com
+cog push 123456789.dkr.ecr.us-east-1.amazonaws.com/model
+```
+
+## Registry-Specific Features
+
+### Replicate (r8.im)
+
+When pushing to Replicate:
+
+- **Automatic versioning**: Each push creates a new version
+- **Web UI**: View at `https://replicate.com/username/model`
+- **Separate weights**: Use `--separate-weights` for optimization
+- **Automatic deployment**: Model is immediately available via API
+
+Example output:
+```
+Pushed r8.im/your-username/my-model
+https://replicate.com/your-username/my-model
+
+Your model is now available:
+  curl -X POST https://api.replicate.com/v1/predictions \
+    -H "Authorization: Bearer $REPLICATE_API_TOKEN" \
+    -d '{"version": "abc123...", "input": {...}}'
+```
+
+### Other registries
+
+Standard OCI push:
+- Standard Docker registry protocol
+- Standard layer compression
+- Compatible with any Docker tooling
+
+## Build Process
+
+When you run `cog push`, Cog:
+
+1. **Validates** your `cog.yaml` configuration
+2. **Builds** a Docker image (same as `cog build`)
+3. **Tags** the image with the specified name
+4. **Pushes** to the registry:
+   - Compresses layers
+   - Shows progress for each layer
+   - Handles authentication
+5. **Reports** success with URL (for Replicate)
+
+## Image Contents
+
+The pushed image contains:
+
+- **Base system**: Ubuntu with CUDA (if GPU enabled)
+- **Python environment**: Specified Python version and packages
+- **Your code**: All files in the current directory
+- **Model weights**: Embedded in the image (or separate layer with `--separate-weights`)
+- **Cog runtime**: HTTP server and prediction infrastructure
+- **Metadata**: OpenAPI schema, model configuration
+
+## Layer Structure
+
+### Standard build
+
+```
+┌─────────────────────┐
+│ Your code & weights │  ← Changes often
+├─────────────────────┤
+│ Python packages     │  ← Changes sometimes
+├─────────────────────┤
+│ System packages     │  ← Rarely changes
+├─────────────────────┤
+│ Base image (CUDA)   │  ← Cached
+└─────────────────────┘
+```
+
+### With --separate-weights
+
+```
+┌─────────────────────┐
+│ Your code          │  ← Changes often, small
+├─────────────────────┤
+│ Model weights      │  ← Changes rarely, large
+├─────────────────────┤
+│ Python packages    │  ← Changes sometimes
+├─────────────────────┤
+│ System packages    │  ← Rarely changes
+├─────────────────────┤
+│ Base image (CUDA)  │  ← Cached
+└─────────────────────┘
+```
+
+Separate weights improve cache efficiency when you update code but not weights.
+
+## Progress Output
+
+### Default (auto)
+
+```
+ab12cd34: Pushing [==========================>] 2.048 MB/2.048 MB
+ef56gh78: Pushing [===================>       ] 1.5 MB/2.0 MB
+ij90kl12: Pushed
+```
+
+### Plain (for CI/CD)
+
+```bash
+cog push r8.im/username/model --progress=plain
+```
+
+Output:
+```
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 2.34kB
+#1 DONE 0.0s
+...
+```
+
+### Quiet
+
+```bash
+cog push r8.im/username/model --progress=quiet
+```
+
+Minimal output, only errors and final result.
+
+## Error Handling
+
+### Build failures
+
+If the build fails, Cog stops before pushing:
+
+```
+Error: Failed to install package 'invalid-package'
+```
+
+Fix the issue and try again.
+
+### Push failures
+
+Common issues:
+
+**Authentication error:**
+```
+Error: authentication required
+```
+Solution: Run `cog login` (for Replicate) or `docker login` (for other registries)
+
+**Network error:**
+```
+Error: failed to push layer: connection timeout
+```
+Solution: Check your network connection and try again
+
+**Permission error:**
+```
+Error: permission denied
+```
+Solution: Verify you have push access to the repository
+
+### Registry errors
+
+**Invalid image name:**
+```
+Error: no provider found for image 'invalid-name'
+```
+Solution: Use correct format: `registry.example.com/username/model`
+
+**Repository doesn't exist:**
+```
+Error: repository not found
+```
+Solution: Create the repository on your registry first
+
+## Performance Tips
+
+### Use layer caching
+
+Order your `cog.yaml` to maximize cache hits:
+
+```yaml
+build:
+  # These rarely change (good for caching)
+  python_version: "3.12"
+  system_packages:
+    - ffmpeg
+  
+  # These change sometimes
+  python_requirements: requirements.txt
+  
+  # Your code changes often (last layer)
+predict: "predict.py:Predictor"
+```
+
+### Use --separate-weights
+
+For large models, separate weights from code:
+
+```bash
+cog push r8.im/username/model --separate-weights
+```
+
+### Optimize dependencies
+
+Only install what you need:
+
+```txt
+# ❌ Don't install everything
+transformers
+torch
+torchvision
+torchaudio
+
+# ✅ Install only what you use
+transformers==4.30.0
+torch==2.0.0
+```
+
+### Use fast network
+
+Pushing large images can take time. Use a fast, stable network connection.
+
+## CI/CD Integration
+
+### GitHub Actions
+
+```yaml
+name: Push to Replicate
+on:
+  push:
+    branches: [main]
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: replicate/setup-cog@v1
+      - name: Push to Replicate
+        env:
+          REPLICATE_API_TOKEN: ${{ secrets.REPLICATE_API_TOKEN }}
+        run: |
+          echo $REPLICATE_API_TOKEN | cog login --token-stdin
+          cog push r8.im/username/model
+```
+
+### GitLab CI
+
+```yaml
+push:
+  image: replicate/cog:latest
+  script:
+    - echo $REPLICATE_API_TOKEN | cog login --token-stdin
+    - cog push r8.im/username/model
+  only:
+    - main
+```
+
+## See Also
+
+- [cog build](/cli/build) - Build without pushing
+- [cog login](#authentication) - Authenticate with registries
+- [Deployment guide](/guides/deploying) - Deploy your model
+- [cog.yaml reference](/config/cog-yaml) - Configuration options

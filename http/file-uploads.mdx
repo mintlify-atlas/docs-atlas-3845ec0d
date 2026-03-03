@@ -1,0 +1,174 @@
+---
+title: File Uploads
+description: Configure how Cog handles file outputs from predictions
+---
+
+A model's `predict` function can produce file output by yielding or returning a `cog.Path` or `cog.File` value.
+
+## Default Behavior (Base64 Data URLs)
+
+By default, files are returned as a base64-encoded [data URL](https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/Data_URLs).
+
+### Request
+
+```bash
+curl http://localhost:5001/predictions -X POST \
+    --header "Content-Type: application/json" \
+    --data '{
+      "input": {"prompt": "A picture of an onion with sunglasses"}
+    }'
+```
+
+### Response
+
+```json
+{
+    "status": "succeeded",
+    "output": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA..."
+}
+```
+
+## Custom Upload URLs
+
+When creating a prediction synchronously, the client can configure a base URL to upload output files to instead by setting the `output_file_prefix` parameter in the request body.
+
+### Request
+
+```bash
+curl http://localhost:5001/predictions -X POST \
+    --header "Content-Type: application/json" \
+    --data '{
+      "input": {"prompt": "A picture of an onion with sunglasses"},
+      "output_file_prefix": "https://example.com/upload"
+    }'
+```
+
+<ParamField body="output_file_prefix" type="string">
+Base URL where output files will be uploaded. When the model produces a file output, the server will upload the file to this URL and return the resulting URL in the response.
+</ParamField>
+
+### Upload Request
+
+When the model produces a file output, the server sends the following request to upload the file to the configured URL:
+
+```http
+PUT /upload HTTP/1.1
+Host: example.com
+Content-Type: multipart/form-data
+
+--boundary
+Content-Disposition: form-data; name="file"; filename="image.png"
+Content-Type: image/png
+
+<binary data>
+--boundary--
+```
+
+### Successful Upload Response
+
+If the upload succeeds, the server responds with output:
+
+```json
+{
+    "status": "succeeded",
+    "output": "http://example.com/upload/image.png"
+}
+```
+
+### Failed Upload
+
+If the upload fails, the server responds with an error.
+
+## Asynchronous Predictions with File Uploads
+
+<Warning>
+File uploads for predictions created asynchronously require `--upload-url` to be specified when starting the HTTP server.
+</Warning>
+
+When running the Cog server with asynchronous predictions that produce file outputs, you must configure an upload URL when starting the container:
+
+```bash
+docker run -d -p 5001:5000 my-model \
+    python -m cog.server.http --upload-url=https://example.com/upload
+```
+
+This is required because asynchronous predictions run in the background, and the server needs to know where to upload files once they're generated.
+
+## Server Configuration
+
+### --upload-url
+
+Specifies the base URL where files from asynchronous predictions will be uploaded.
+
+```bash
+docker run -d -p 5001:5000 my-model \
+    python -m cog.server.http --upload-url=https://example.com/upload
+```
+
+This option is required for asynchronous predictions that produce file outputs. The server will upload files to this URL using the same multipart form-data format shown above.
+
+## Example: Model with File Output
+
+Here's an example of a Cog model that produces file output:
+
+```python
+from cog import BasePredictor, Path
+import PIL.Image
+
+class Predictor(BasePredictor):
+    def predict(self, prompt: str) -> Path:
+        # Generate an image
+        image = generate_image(prompt)
+        
+        # Save to a temporary file
+        output_path = Path("/tmp/output.png")
+        image.save(output_path)
+        
+        return output_path
+```
+
+## Upload Endpoint Requirements
+
+Your upload endpoint must:
+
+1. Accept PUT requests with `multipart/form-data` content
+2. Handle a form field named `file` containing the binary data
+3. Return a successful status code (2xx) if the upload succeeds
+4. Optionally return the URL where the file can be accessed
+
+### Example Upload Endpoint (Python/Flask)
+
+```python
+from flask import Flask, request
+import os
+
+app = Flask(__name__)
+
+@app.route('/upload', methods=['PUT'])
+def upload_file():
+    if 'file' not in request.files:
+        return {'error': 'No file part'}, 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return {'error': 'No selected file'}, 400
+    
+    # Save the file
+    file_path = os.path.join('/uploads', file.filename)
+    file.save(file_path)
+    
+    # Return the URL where the file can be accessed
+    return {'url': f'https://example.com/uploads/{file.filename}'}, 200
+```
+
+## File Types
+
+Cog automatically detects the MIME type of uploaded files based on the file extension. Common types include:
+
+- `.png` → `image/png`
+- `.jpg`, `.jpeg` → `image/jpeg`
+- `.gif` → `image/gif`
+- `.mp4` → `video/mp4`
+- `.wav` → `audio/wav`
+- `.json` → `application/json`
+- `.txt` → `text/plain`
